@@ -253,7 +253,13 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             log(f"Using device profile: {profile.name} ({profile.vendor})")
         
         with SerialSession(port_path) as session:
+            # Clear noise and wake up
+            session.drain(0.5)
             runner = CommandRunner(session, prompt_patterns)
+            
+            # Initial wake up/prompt sync
+            log("Waking up device console...")
+            runner.get_prompted()
             
             runner.ensure_priv_exec()
             log("Acquired privileged mode.")

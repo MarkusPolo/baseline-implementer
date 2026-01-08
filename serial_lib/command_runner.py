@@ -1,4 +1,5 @@
 import re
+import time
 from .serial_session import SerialSession
 from .prompt_detector import PromptDetector, PromptType
 from typing import Optional, Dict
@@ -17,12 +18,17 @@ class CommandRunner:
 
     def get_prompted(self) -> str:
         # Wake up console and capture prompt
-        for _ in range(3):
+        out = ""
+        for _ in range(5):
             self.session.send_line("")
-        out = self.session.drain(0.8)
-        if self.detector.PROMPT_ANY.search(out):
-            return out
-        out += self.session.wait_for(self.detector.PROMPT_ANY, timeout=6.0)
+            time.sleep(0.3) # Give device time to process
+            new_out = self.session.read_available()
+            out += new_out
+            if self.detector.PROMPT_ANY.search(out):
+                return out
+        
+        # If still no prompt, wait more aggressively
+        out += self.session.wait_for(self.detector.PROMPT_ANY, timeout=8.0)
         return out
 
     def ensure_priv_exec(self):

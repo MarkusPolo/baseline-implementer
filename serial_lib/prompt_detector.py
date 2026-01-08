@@ -16,10 +16,10 @@ class PromptDetector:
     
     # Default Cisco IOS patterns (fallback)
     DEFAULT_PATTERNS = {
-        "user": r"\n.*?>\s*$",
-        "priv": r"\n.*?#\s*$",
-        "config": r"\n.*?\(config[^\)]*\)#\s*$",
-        "any": r"\n.*?[>#]\s*$"
+        "user": r"(?:\r|\n|^).*?>\s*$",
+        "priv": r"(?:\r|\n|^).*?#\s*$",
+        "config": r"(?:\r|\n|^).*?\(config[^\)]*\)#\s*$",
+        "any": r"(?:\r|\n|^).*?[>#]\s*$"
     }
     
     def __init__(self, patterns: Optional[Dict[str, str]] = None):

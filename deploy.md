@@ -95,9 +95,9 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
 source ~/.bashrc
 
 # Install Node 18 LTS (ARM compatible)
-nvm install 18
-nvm use 18
-nvm alias default 18
+nvm install 20
+nvm use 20
+nvm alias default 20
 
 # Verify
 node --version  # Should show v18.x
@@ -224,9 +224,9 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/baseline-implementer/frontend
-Environment="PATH=/home/ubuntu/.nvm/versions/node/v18.19.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PATH=/home/administrator/.nvm/versions/node/v20.19.6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="NODE_ENV=production"
-ExecStart=/home/ubuntu/.nvm/versions/node/v18.19.0/bin/npm start
+ExecStart=/home/administrator/.nvm/versions/node/v20.19.6/bin/node/npm start
 Restart=always
 RestartSec=10
 

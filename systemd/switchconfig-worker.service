@@ -1,0 +1,17 @@
+[Unit]
+Description=Switch Configurator Celery Worker
+After=network.target redis-server.service switchconfig-backend.service
+
+[Service]
+Type=simple
+User=administrator
+WorkingDirectory=/home/administrator/baseline-implementer
+Environment="PATH=/home/administrator/miniforge3/envs/switchconfig/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONPATH=/home/administrator/baseline-implementer"
+Environment="REDIS_URL=redis://localhost:6379/0"
+ExecStart=/home/administrator/miniforge3/envs/switchconfig/bin/celery -A backend.worker.celery_app worker --loglevel=info --concurrency=2
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

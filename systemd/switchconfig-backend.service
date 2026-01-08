@@ -1,0 +1,16 @@
+[Unit]
+Description=Switch Configurator Backend (FastAPI)
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=administrator
+WorkingDirectory=/home/administrator/baseline-implementer
+Environment="PATH=/home/administrator/miniforge3/envs/switchconfig/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONPATH=/home/administrator/baseline-implementer"
+ExecStart=/home/administrator/miniforge3/envs/switchconfig/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

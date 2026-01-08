@@ -1,0 +1,16 @@
+[Unit]
+Description=Switch Configurator Frontend (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=administrator
+WorkingDirectory=/home/administrator/baseline-implementer/frontend
+Environment="PATH=/home/administrator/.nvm/versions/node/v20.19.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="NODE_ENV=production"
+ExecStart=/home/administrator/.nvm/versions/node/v20.19.0/bin/npm start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -11,8 +11,8 @@ import sys
 import os
 from pathlib import Path
 
-# Database path - adjust if needed
-DB_PATH = Path(__file__).parent / "sql_app.db"
+# Database path - app.db is in the project root
+DB_PATH = Path(__file__).parent.parent / "app.db"
 
 def migrate():
     """Rename schema column to config_schema in templates table."""

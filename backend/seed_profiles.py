@@ -1,15 +1,20 @@
 """
 Seed default device profiles into the database.
-Run this script after starting the backend to populate default profiles.
+Run this script to create database tables and populate default profiles.
 """
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from backend.database import SessionLocal
+from backend.database import SessionLocal, engine, Base
 from backend.models import DeviceProfile
 
 def seed_profiles():
+    # Create all tables if they don't exist
+    print("Creating database tables...")
+    Base.metadata.create_all(bind=engine)
+    print("Tables created successfully.")
+    
     db = SessionLocal()
     
     # Check if profiles already exist

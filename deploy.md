@@ -123,10 +123,11 @@ conda activate switchconfig
 # Install Python dependencies
 pip install fastapi uvicorn sqlalchemy celery redis jinja2 pyserial
 
-# Seed device profiles
+# Create database tables and seed device profiles
+# This will create switch_config.db and populate default profiles
 python backend/seed_profiles.py
 
-# Test backend
+# Test backend (optional - verify it starts)
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
 # Ctrl+C to stop after verifying it starts
 ```

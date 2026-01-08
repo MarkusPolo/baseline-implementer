@@ -257,10 +257,6 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             session.drain(0.5)
             runner = CommandRunner(session, prompt_patterns)
             
-            # Initial wake up/prompt sync
-            log("Waking up device console...")
-            runner.get_prompted()
-            
             runner.ensure_priv_exec()
             log("Acquired privileged mode.")
             

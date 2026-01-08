@@ -16,10 +16,11 @@ class PromptDetector:
     
     # Default Cisco IOS patterns (fallback)
     DEFAULT_PATTERNS = {
-        "user": r"(?:\r|\n|^).*?>\s*$",
-        "priv": r"(?:\r|\n|^).*?#\s*$",
-        "config": r"(?:\r|\n|^).*?\(config[^\)]*\)#\s*$",
-        "any": r"(?:\r|\n|^).*?[>#]\s*$"
+        "user": r"(?:\r|\n|^).*?>\s*\Z",
+        "priv": r"(?:\r|\n|^).*?#\s*\Z",
+        "config": r"(?:\r|\n|^).*?\(config[^\)]*\)#\s*\Z",
+        "any": r"(?:\r|\n|^).*?[>#]\s*\Z",
+        "password": r"(?:\r|\n|^)[Pp]assword:\s*\Z"
     }
     
     def __init__(self, patterns: Optional[Dict[str, str]] = None):
@@ -27,14 +28,21 @@ class PromptDetector:
         Initialize PromptDetector with custom or default patterns.
         
         Args:
-            patterns: Dict with keys 'user', 'priv', 'config', 'any'
+            patterns: Dict with keys 'user', 'priv', 'config', 'any', 'password'
         """
-        patterns = patterns or self.DEFAULT_PATTERNS
+        p = self.DEFAULT_PATTERNS.copy()
+        if patterns:
+            p.update(patterns)
         
-        self.PROMPT_USER = re.compile(patterns.get("user", self.DEFAULT_PATTERNS["user"]))
-        self.PROMPT_PRIV = re.compile(patterns.get("priv", self.DEFAULT_PATTERNS["priv"]))
-        self.PROMPT_CONF = re.compile(patterns.get("config", self.DEFAULT_PATTERNS["config"]))
-        self.PROMPT_ANY = re.compile(patterns.get("any", self.DEFAULT_PATTERNS["any"]))
+        flags = re.MULTILINE
+        self.PROMPT_USER = re.compile(p["user"], flags)
+        self.PROMPT_PRIV = re.compile(p["priv"], flags)
+        self.PROMPT_CONF = re.compile(p["config"], flags)
+        self.PROMPT_ANY = re.compile(p["any"], flags)
+        self.PROMPT_PWD = re.compile(p["password"], flags)
+        
+        # Combined pattern for privilege escalation
+        self.PROMPT_PRIV_OR_PWD = re.compile(f"({p['priv']})|({p['password']})", flags)
     
     def detect(self, buffer: str) -> PromptType:
         """

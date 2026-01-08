@@ -44,11 +44,14 @@ class CommandRunner:
 
         if prompt_type == PromptType.USER:
             self.session.send_line("en")
-            # Handling enabling password if needed (placeholder)
-            out = self.session.drain(0.5)
-            if re.search(r"[Pp]assword:\s*$", out):
+            # Wait for either the priv prompt OR a password prompt
+            out = self.session.wait_for(self.detector.PROMPT_PRIV_OR_PWD, timeout=10.0)
+            
+            if self.detector.PROMPT_PWD.search(out):
                 raise RuntimeError("Enable password prompt detected; add password handling.")
-            self.session.wait_for(self.detector.PROMPT_PRIV, timeout=10.0)
+            
+            if not self.detector.PROMPT_PRIV.search(out):
+                 raise RuntimeError(f"Unexpected response after 'en':\n{out[-400:]}")
             return
 
         # Unknown prompt style

@@ -4,8 +4,10 @@
   "/favicon.ico/route": "/favicon.ico",
   "/jobs/[id]/page": "/jobs/[id]",
   "/jobs/new/page": "/jobs/new",
+  "/jobs/page": "/jobs",
   "/page": "/",
   "/profiles/page": "/profiles",
+  "/settings/page": "/settings",
   "/templates/page": "/templates",
   "/templates/wizard/page": "/templates/wizard"
 }

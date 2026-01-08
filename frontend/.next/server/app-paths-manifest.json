@@ -4,8 +4,10 @@
   "/favicon.ico/route": "app/favicon.ico/route.js",
   "/jobs/[id]/page": "app/jobs/[id]/page.js",
   "/jobs/new/page": "app/jobs/new/page.js",
+  "/jobs/page": "app/jobs/page.js",
   "/page": "app/page.js",
   "/profiles/page": "app/profiles/page.js",
+  "/settings/page": "app/settings/page.js",
   "/templates/page": "app/templates/page.js",
   "/templates/wizard/page": "app/templates/wizard/page.js"
 }

@@ -34,7 +34,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     const [loading, setLoading] = useState(true);
 
     const fetchJob = () => {
-        api.get(`/jobs/${resolvedParams.id}`)
+        api.get(`jobs/${resolvedParams.id}`)
             .then((res) => setJob(res.data))
             .catch((err) => console.error(err))
             .finally(() => setLoading(false));
@@ -105,10 +105,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                         <div
                                             key={idx}
                                             className={`rounded-lg border p-2 text-xs ${check.status === 'pass'
-                                                    ? 'border-emerald-500/30 bg-emerald-500/5'
-                                                    : check.status === 'fail'
-                                                        ? 'border-red-500/30 bg-red-500/5'
-                                                        : 'border-amber-500/30 bg-amber-500/5'
+                                                ? 'border-emerald-500/30 bg-emerald-500/5'
+                                                : check.status === 'fail'
+                                                    ? 'border-red-500/30 bg-red-500/5'
+                                                    : 'border-amber-500/30 bg-amber-500/5'
                                                 }`}
                                         >
                                             <div className="flex items-start gap-2">

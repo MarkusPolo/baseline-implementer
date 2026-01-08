@@ -24,7 +24,7 @@ class Template(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     body = Column(Text, nullable=False)  # Jinja2 template
-    schema = Column(JSON, nullable=False) # JSON schema for variables
+    config_schema = Column(JSON, nullable=False) # JSON schema for variables
     verification = Column(JSON, default=list)  # List of verification checks
     profile_id = Column(Integer, ForeignKey("device_profiles.id"), nullable=True)  # Device profile
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

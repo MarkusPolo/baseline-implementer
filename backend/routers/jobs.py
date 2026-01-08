@@ -12,6 +12,10 @@ router = APIRouter(
     tags=["jobs"],
 )
 
+@router.get("/", response_model=List[schemas.Job])
+def list_jobs(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
+    return db.query(models.Job).order_by(models.Job.created_at.desc()).offset(skip).limit(limit).all()
+
 @router.post("/", response_model=schemas.Job)
 def create_job(job: schemas.JobCreate, db: Session = Depends(database.get_db)):
     # Create the parent Job

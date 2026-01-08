@@ -11,7 +11,7 @@ router = APIRouter(
 
 @router.post("/", response_model=schemas.Template)
 def create_template(template: schemas.TemplateCreate, db: Session = Depends(database.get_db)):
-    db_template = models.Template(name=template.name, body=template.body, schema=template.schema)
+    db_template = models.Template(name=template.name, body=template.body, config_schema=template.config_schema)
     db.add(db_template)
     try:
         db.commit()

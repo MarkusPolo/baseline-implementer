@@ -6,7 +6,7 @@ import api from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { parseCSV, normalizeHeaders } from "@/lib/csv-utils";
 
-type Template = { id: number; name: string; schema: any; };
+type Template = { id: number; name: string; config_schema: any; };
 
 export default function NewJobPage() {
     const router = useRouter();
@@ -23,7 +23,7 @@ export default function NewJobPage() {
     );
 
     useEffect(() => {
-        api.get("/templates").then(res => setTemplates(res.data));
+        api.get("templates/").then(res => setTemplates(res.data));
     }, []);
 
     const togglePort = (index: number) => {
@@ -97,7 +97,7 @@ export default function NewJobPage() {
                 }))
             };
 
-            const res = await api.post("/jobs", payload);
+            const res = await api.post("jobs/", payload);
             router.push(`/jobs/${res.data.id}`);
         } catch (err) {
             alert("Failed to create job");
@@ -146,8 +146,8 @@ export default function NewJobPage() {
                             <div
                                 key={p.id}
                                 className={`rounded-lg border p-4 transition-all ${p.enabled
-                                        ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/50"
-                                        : "border-neutral-800 bg-neutral-900/50 opacity-60 hover:opacity-100"
+                                    ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/50"
+                                    : "border-neutral-800 bg-neutral-900/50 opacity-60 hover:opacity-100"
                                     }`}
                             >
                                 <div className="flex items-center justify-between mb-3">
@@ -164,7 +164,7 @@ export default function NewJobPage() {
                                     <div className="space-y-2">
                                         {/* Render inputs based on schema fields */}
                                         {/* Assuming schema.fields is array of {name, label, type} */}
-                                        {selectedTemplate.schema.fields?.map((field: any) => (
+                                        {selectedTemplate.config_schema.fields?.map((field: any) => (
                                             <div key={field.name}>
                                                 <label className="block text-[10px] uppercase tracking-wider text-neutral-500">{field.name}</label>
                                                 <input

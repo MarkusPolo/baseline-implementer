@@ -28,7 +28,7 @@ export default function WizardPage() {
 
     useEffect(() => {
         // Load profiles
-        api.get("/profiles").then((res) => setProfiles(res.data)).catch(() => { });
+        api.get("profiles/").then((res) => setProfiles(res.data)).catch(() => { });
     }, []);
 
     const nextStep = () => setStep(s => s + 1);
@@ -91,10 +91,10 @@ export default function WizardPage() {
 
     const handleSubmit = async () => {
         try {
-            await api.post("/templates", {
+            await api.post("templates/", {
                 name: formData.name,
                 body: generateTemplate(),
-                schema: generateSchema(),
+                config_schema: generateSchema(),
                 profile_id: formData.profileId
             });
             router.push("/templates");

@@ -20,13 +20,13 @@ class DeviceProfile(DeviceProfileBase):
     created_at: datetime.datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Template Schemas
 class TemplateBase(BaseModel):
     name: str
     body: str
-    schema: Dict[str, Any]
+    config_schema: Dict[str, Any]
     verification: Optional[List[Dict[str, Any]]] = []
     profile_id: Optional[int] = None
 
@@ -38,7 +38,7 @@ class Template(TemplateBase):
     created_at: datetime.datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Job Schemas
 class JobTargetBase(BaseModel):
@@ -60,7 +60,7 @@ class JobTarget(JobTargetBase):
     updated_at: datetime.datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class JobCreate(BaseModel):
     template_id: int
@@ -74,4 +74,4 @@ class Job(BaseModel):
     targets: List[JobTarget] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True

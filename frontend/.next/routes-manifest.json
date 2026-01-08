@@ -56,6 +56,12 @@
       "namedRegex": "^/favicon\\.ico(?:/)?$"
     },
     {
+      "page": "/jobs",
+      "regex": "^/jobs(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/jobs(?:/)?$"
+    },
+    {
       "page": "/jobs/new",
       "regex": "^/jobs/new(?:/)?$",
       "routeKeys": {},
@@ -66,6 +72,12 @@
       "regex": "^/profiles(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/profiles(?:/)?$"
+    },
+    {
+      "page": "/settings",
+      "regex": "^/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/settings(?:/)?$"
     },
     {
       "page": "/templates",

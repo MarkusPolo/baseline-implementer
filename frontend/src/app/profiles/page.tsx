@@ -16,7 +16,7 @@ export default function ProfilesPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        api.get("/profiles")
+        api.get("profiles/")
             .then((res) => setProfiles(res.data))
             .catch((err) => console.error(err))
             .finally(() => setLoading(false));

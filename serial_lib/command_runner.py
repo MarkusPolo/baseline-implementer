@@ -1,0 +1,75 @@
+import re
+from .serial_session import SerialSession
+from .prompt_detector import PromptDetector, PromptType
+from typing import Optional, Dict
+
+class CommandRunner:
+    def __init__(self, session: SerialSession, prompt_patterns: Optional[Dict[str, str]] = None):
+        """
+        Initialize CommandRunner with optional device-specific prompt patterns.
+        
+        Args:
+            session: SerialSession instance
+            prompt_patterns: Optional dict of prompt patterns for device profile
+        """
+        self.session = session
+        self.detector = PromptDetector(prompt_patterns)
+
+    def get_prompted(self) -> str:
+        # Wake up console and capture prompt
+        for _ in range(3):
+            self.session.send_line("")
+        out = self.session.drain(0.8)
+        if self.detector.PROMPT_ANY.search(out):
+            return out
+        out += self.session.wait_for(self.detector.PROMPT_ANY, timeout=6.0)
+        return out
+
+    def ensure_priv_exec(self):
+        buf = self.get_prompted()
+
+        prompt_type = self.detector.detect(buf)
+        if prompt_type == PromptType.PRIV:
+            return
+        elif prompt_type == PromptType.CONFIG:
+            self.session.send_line("end")
+            self.session.wait_for(self.detector.PROMPT_PRIV, timeout=5.0)
+            return
+
+        if prompt_type == PromptType.USER:
+            self.session.send_line("en")
+            # Handling enabling password if needed (placeholder)
+            out = self.session.drain(0.5)
+            if re.search(r"[Pp]assword:\s*$", out):
+                raise RuntimeError("Enable password prompt detected; add password handling.")
+            self.session.wait_for(self.detector.PROMPT_PRIV, timeout=10.0)
+            return
+
+        # Unknown prompt style
+        raise RuntimeError(f"Could not determine prompt state. Buffer tail:\n{buf[-400:]}")
+
+    def run_show(self, cmd: str, timeout: float = 20.0) -> str:
+        self.session.send_line(cmd)
+        # capture until we return to privileged prompt
+        out = self.session.wait_for(self.detector.PROMPT_PRIV, timeout=timeout)
+        return out
+
+    def enter_config_mode(self):
+        self.ensure_priv_exec()
+        self.session.send_line("conf t")
+        self.session.wait_for(self.detector.PROMPT_CONF, timeout=10.0)
+
+    def exit_config_mode(self):
+        self.session.send_line("end")
+        self.session.wait_for(self.detector.PROMPT_PRIV, timeout=10.0)
+    
+    def disable_paging(self):
+        self.session.send_line("terminal length 0")
+        # In config mode it returns to config prompt, in priv mode to priv prompt.
+        # We generally expect this to be run in priv mode or config mode.
+        # For safety let's assume usage in config mode or check prompt.
+        # But commonly "terminal length 0" is a priv exec command on many platforms,
+        # though often works in config mode too or is implicit.
+        # Let's match PROMPT_ANY to be safe or just drain.
+        self.session.drain(0.5)
+

@@ -86,6 +86,12 @@
       "namedRegex": "^/templates(?:/)?$"
     },
     {
+      "page": "/templates/builder",
+      "regex": "^/templates/builder(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/templates/builder(?:/)?$"
+    },
+    {
       "page": "/templates/wizard",
       "regex": "^/templates/wizard(?:/)?$",
       "routeKeys": {},

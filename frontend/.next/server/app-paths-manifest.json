@@ -8,6 +8,7 @@
   "/page": "app/page.js",
   "/profiles/page": "app/profiles/page.js",
   "/settings/page": "app/settings/page.js",
+  "/templates/builder/page": "app/templates/builder/page.js",
   "/templates/page": "app/templates/page.js",
   "/templates/wizard/page": "app/templates/wizard/page.js"
 }

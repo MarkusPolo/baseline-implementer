@@ -29,7 +29,7 @@ export default function TemplatesPage() {
                     <h1 className="text-2xl font-bold text-white">Templates</h1>
                     <p className="text-neutral-400">Manage configuration templates.</p>
                 </div>
-                <Link href="/templates/wizard" className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
+                <Link href="/templates/builder" className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
                     <Plus className="h-4 w-4" />
                     New Template
                 </Link>

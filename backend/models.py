@@ -23,9 +23,11 @@ class Template(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
-    body = Column(Text, nullable=False)  # Jinja2 template
+    body = Column(Text, nullable=True)  # Deprecated: Jinja2 template
+    steps = Column(JSON, nullable=True) # New: List of toolbox steps
     config_schema = Column(JSON, nullable=False) # JSON schema for variables
-    verification = Column(JSON, default=list)  # List of verification checks
+    verification = Column(JSON, default=list)  # Deprecated: List of verification checks
+    is_baseline = Column(Integer, default=0) # 1 for baseline, 0 for project-specific
     profile_id = Column(Integer, ForeignKey("device_profiles.id"), nullable=True)  # Device profile
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 

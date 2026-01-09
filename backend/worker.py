@@ -232,12 +232,8 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
         db.commit()
 
     try:
-        # 1. Render Template
+        # 1. Prepare Environment
         env = Environment(undefined=StrictUndefined)
-        template = env.from_string(template_body)
-        rendered_config = template.render(**target.variables)
-        
-        log("Template rendered successfully.")
         
         # 2. Connect to Serial
         port_path = os.path.expanduser(target.port)
@@ -257,41 +253,101 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             session.drain(0.5)
             runner = CommandRunner(session, prompt_patterns)
             
-            runner.ensure_priv_exec()
-            log("Acquired privileged mode.")
-            
-            runner.enter_config_mode()
-            log("Entered config mode.")
-            
-            # Send config line by line
-            for line in rendered_config.splitlines():
-                if line.strip():
-                     session.send_line(line)
-                     time.sleep(0.1) 
-            
-            log("Config sent.")
-            
-            runner.exit_config_mode()
-            
-            # Run verification checks
-            if verification_checks:
-                log(f"Running {len(verification_checks)} verification check(s)...")
-                check_results = run_verification_checks(runner, verification_checks, target.variables)
-                target.verification_results = check_results
+            # 3. Execute Steps (New Logic) or Template Body (Old Logic)
+            if target.job.template.steps:
+                log(f"Executing {len(target.job.template.steps)} steps...")
+                target.verification_results = []
                 
-                failed_checks = [c for c in check_results if c["status"] in ["fail", "error"]]
+                for i, step in enumerate(target.job.template.steps):
+                    step_type = step.get("type", "command")
+                    log(f"Step {i+1}: {step_type}")
+                    
+                    if step_type == "command":
+                        cmd_template = step.get("content", "")
+                        rendered_cmd = env.from_string(cmd_template).render(**target.variables)
+                        session.send_line(rendered_cmd)
+                        # Wait for prompt after command
+                        runner.wait_for_prompt()
+                        log(f"Sent: {rendered_cmd}")
+                        
+                    elif step_type == "verify":
+                        check = {
+                            "name": step.get("name", f"Check {i+1}"),
+                            "command": step.get("command", "show run"),
+                            "type": step.get("check_type", "regex_match"),
+                            "pattern": step.get("pattern", ""),
+                            "evidence_lines": step.get("evidence_lines", 3)
+                        }
+                        results = run_verification_checks(runner, [check], target.variables)
+                        target.verification_results.extend(results)
+                        
+                        if any(r["status"] in ["fail", "error"] for r in results):
+                             log(f"Verification FAILED: {check['name']}")
+                        else:
+                             log(f"Verification PASSED: {check['name']}")
+
+                    elif step_type == "priv_mode":
+                         runner.ensure_priv_exec()
+                         log("Acquired privileged mode.")
+                         
+                    elif step_type == "config_mode":
+                         runner.enter_config_mode()
+                         log("Entered config mode.")
+                         
+                    elif step_type == "exit_config":
+                         runner.exit_config_mode()
+                         log("Exited config mode.")
+                
+                # Final check if any verification failed
+                failed_checks = [c for c in target.verification_results if c["status"] in ["fail", "error"]]
                 if failed_checks:
                     target.status = "failed"
                     target.failure_category = FailureCategory.VERIFICATION_FAILED
-                    target.remediation = "One or more verification checks failed. Review check results for details."
-                    log(f"Verification FAILED: {len(failed_checks)}/{len(check_results)} checks failed.")
+                    target.remediation = "One or more verification checks failed."
                 else:
                     target.status = "success"
-                    log(f"Verification PASSED: All {len(check_results)} checks passed.")
+                    log("All steps completed successfully.")
+
             else:
-                # No checks defined, just mark success
-                target.status = "success"
-                log("No verification checks defined. Execution completed successfully.")
+                # Fallback to Old Logic
+                log("Executing deprecated body-based template...")
+                template = env.from_string(template_body)
+                rendered_config = template.render(**target.variables)
+                log("Template rendered successfully.")
+                
+                runner.ensure_priv_exec()
+                log("Acquired privileged mode.")
+                
+                runner.enter_config_mode()
+                log("Entered config mode.")
+                
+                # Send config line by line
+                for line in rendered_config.splitlines():
+                    if line.strip():
+                         session.send_line(line)
+                         time.sleep(0.1) 
+                
+                log("Config sent.")
+                runner.exit_config_mode()
+                
+                # Run verification checks
+                if verification_checks:
+                    log(f"Running {len(verification_checks)} verification check(s)...")
+                    check_results = run_verification_checks(runner, verification_checks, target.variables)
+                    target.verification_results = check_results
+                    
+                    failed_checks = [c for c in check_results if c["status"] in ["fail", "error"]]
+                    if failed_checks:
+                        target.status = "failed"
+                        target.failure_category = FailureCategory.VERIFICATION_FAILED
+                        target.remediation = "One or more verification checks failed."
+                        log(f"Verification FAILED: {len(failed_checks)}/{len(check_results)} checks failed.")
+                    else:
+                        target.status = "success"
+                        log(f"Verification PASSED: All {len(check_results)} checks passed.")
+                else:
+                    target.status = "success"
+                    log("No verification checks defined. Execution completed successfully.")
 
     except Exception as e:
         target.status = "failed"

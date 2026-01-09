@@ -25,9 +25,11 @@ class DeviceProfile(DeviceProfileBase):
 # Template Schemas
 class TemplateBase(BaseModel):
     name: str
-    body: str
+    body: Optional[str] = None
+    steps: Optional[List[Dict[str, Any]]] = None
     config_schema: Dict[str, Any]
     verification: Optional[List[Dict[str, Any]]] = []
+    is_baseline: Optional[int] = 0
     profile_id: Optional[int] = None
 
 class TemplateCreate(TemplateBase):

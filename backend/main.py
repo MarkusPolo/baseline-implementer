@@ -3,7 +3,7 @@ import sys
 # Ensure project root is in path for serial_lib imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
 from .routers import templates, jobs, profiles, console, macros
@@ -12,6 +12,24 @@ from .routers import templates, jobs, profiles, console, macros
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup_check():
+    try:
+        import websockets
+        print("DEBUG: websockets library is available.")
+    except ImportError:
+        print("DEBUG: websockets library is NOT available.")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"DEBUG MIDDLEWARE: path={request.url.path} type=http headers={request.headers}")
+    response = await call_next(request)
+    return response
+
+# Note: @app.middleware("http") only catches http. We need pure ASGI for websocket logging?
+# FastAPI middleware usage usually wraps everything.
+# But "http" middleware won't run for websockets.
 
 app.add_middleware(
     CORSMiddleware,

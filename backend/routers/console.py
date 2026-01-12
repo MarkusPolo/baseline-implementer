@@ -90,10 +90,4 @@ async def console_websocket(websocket: WebSocket, port_id: str):
             active_consoles.remove(port_path)
 
 
-@router.get("/ws/{port_id}")
-def debug_console_ws(request: Request, port_id: str):
-    return {
-        "detail": "WebSocket upgrade failed",
-        "headers": dict(request.headers),
-        "url": str(request.url)
-    }
+

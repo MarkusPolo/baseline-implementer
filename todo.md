@@ -1,7 +1,7 @@
 # What is working:
 Template Builder is really nice
 
-# What is not working:
-- Variables are detected but not able to be used in the port selection of job creation
-- enter configuration, exit conf and enter priv should be overridable, at the moment uses only default values(not even visible)
-- verification is not working in job
+# What I want to add:
+- The Logs say: Verification Passed, but I cant really verify, that the worker really verified the changes made. So i want to add more debug output to the logs:
+  1. The Logs show the exact verification that was done.
+  2. The worker should capture the full output of the verification process (running config) and the user should be able to see it. (Not in the Logs, but in the UI(extendable))

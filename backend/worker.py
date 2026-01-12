@@ -75,15 +75,29 @@ def suggest_remediation(category: str) -> str:
     }
     return suggestions.get(category, suggestions[FailureCategory.UNKNOWN])
 
-def run_verification_checks(runner: CommandRunner, checks: list, variables: dict) -> list:
+def run_verification_checks(runner: CommandRunner, checks: list, variables: dict, log_func=None, output_cache=None, include_full_output=True) -> list:
     """
     Run verification checks and return results.
     Each check format: {name, command, type, pattern, evidence_lines}
-    Returns: [{check_name, status, evidence, message}]
+    Returns: [{check_name, status, evidence, full_output, message}]
     """
     results = []
     
-    for check in checks:
+    if output_cache is None:
+        output_cache = {}
+
+    def log_msg(msg):
+        if log_func:
+            log_func(msg)
+    
+    # Pre-calculate last indices for commands if we are including full output
+    last_indices = {}
+    if include_full_output:
+        for idx, check in enumerate(checks):
+            cmd = check.get("command", "show run")
+            last_indices[cmd] = idx
+
+    for idx, check in enumerate(checks):
         check_name = check.get("name", "Unnamed Check")
         command = check.get("command", "show run")
         check_type = check.get("type", "regex_match")
@@ -95,19 +109,39 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
             env = Environment(undefined=StrictUndefined)
             pattern = env.from_string(pattern_raw).render(**variables)
         except Exception as e:
+            log_msg(f"Error rendering pattern for '{check_name}': {str(e)}")
             results.append({
                 "check_name": check_name,
                 "status": "error",
                 "evidence": "",
+                "full_output": "",
                 "message": f"Pattern render error: {str(e)}"
             })
             continue
         
+        log_msg(f"Running check '{check_name}': cmd='{command}', type='{check_type}', pattern='{pattern}'")
+        
         try:
-            # Execute command
-            output = runner.run_show(command)
+            # Determine if we should include full output for this specific check
+            is_last_for_cmd = (last_indices.get(command) == idx)
+            should_attach = include_full_output and is_last_for_cmd
+
+            # Execute command (or use cache)
+            if command in output_cache:
+                output = output_cache[command]
+            else:
+                output = runner.run_show(command)
+                output_cache[command] = output
             
             # Run check based on type
+            res = {
+                "check_name": check_name,
+                "status": "pending",
+                "evidence": "",
+                "full_output": output if should_attach else "",
+                "message": ""
+            }
+
             if check_type == "regex_match":
                 match = re.search(pattern, output, re.MULTILINE)
                 if match:
@@ -118,15 +152,13 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
                     end_idx = min(len(lines), match_line_idx + evidence_lines + 1)
                     evidence = "\n".join(lines[start_idx:end_idx])
                     
-                    results.append({
-                        "check_name": check_name,
+                    res.update({
                         "status": "pass",
                         "evidence": evidence,
                         "message": f"Pattern matched: {pattern}"
                     })
                 else:
-                    results.append({
-                        "check_name": check_name,
+                    res.update({
                         "status": "fail",
                         "evidence": output[-500:],  # Last 500 chars as evidence
                         "message": f"Pattern not found: {pattern}"
@@ -135,8 +167,7 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
             elif check_type == "regex_not_present":
                 match = re.search(pattern, output, re.MULTILINE)
                 if not match:
-                    results.append({
-                        "check_name": check_name,
+                    res.update({
                         "status": "pass",
                         "evidence": "",
                         "message": f"Pattern correctly absent: {pattern}"
@@ -148,8 +179,7 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
                     end_idx = min(len(lines), match_line_idx + evidence_lines + 1)
                     evidence = "\n".join(lines[start_idx:end_idx])
                     
-                    results.append({
-                        "check_name": check_name,
+                    res.update({
                         "status": "fail",
                         "evidence": evidence,
                         "message": f"Unwanted pattern found: {pattern}"
@@ -162,25 +192,27 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
                     end = min(len(output), idx + 100)
                     evidence = output[start:end]
                     
-                    results.append({
-                        "check_name": check_name,
+                    res.update({
                         "status": "pass",
                         "evidence": evidence,
                         "message": f"Text found: {pattern}"
                     })
                 else:
-                    results.append({
-                        "check_name": check_name,
+                    res.update({
                         "status": "fail",
                         "evidence": output[-500:],
                         "message": f"Text not found: {pattern}"
                     })
+            
+            results.append(res)
+            log_msg(f"Check '{check_name}' result: {res['status']}")
                     
         except Exception as e:
             results.append({
                 "check_name": check_name,
                 "status": "error",
                 "evidence": "",
+                "full_output": "",
                 "message": f"Check execution error: {str(e)}"
             })
     
@@ -255,10 +287,14 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             
             # 3. Execute Steps (New Logic) or Template Body (Old Logic)
             if target.job.template.steps:
-                log(f"Executing {len(target.job.template.steps)} steps...")
+                # Separate execution steps from verification checks
+                execution_steps = [s for s in target.job.template.steps if s.get("type") != "verify"]
+                verification_steps = [s for s in target.job.template.steps if s.get("type") == "verify"]
+                
+                log(f"Executing {len(execution_steps)} configuration steps...")
                 target.verification_results = []
                 
-                for i, step in enumerate(target.job.template.steps):
+                for i, step in enumerate(execution_steps):
                     step_type = step.get("type", "command")
                     log(f"Step {i+1}: {step_type}")
                     
@@ -270,22 +306,6 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                         runner.wait_for_prompt()
                         log(f"Sent: {rendered_cmd}")
                         
-                    elif step_type == "verify":
-                        check = {
-                            "name": step.get("name", f"Check {i+1}"),
-                            "command": step.get("command", "show run"),
-                            "type": step.get("check_type", "regex_match"),
-                            "pattern": step.get("pattern", ""),
-                            "evidence_lines": step.get("evidence_lines", 3)
-                        }
-                        results = run_verification_checks(runner, [check], target.variables)
-                        target.verification_results.extend(results)
-                        
-                        if any(r["status"] in ["fail", "error"] for r in results):
-                             log(f"Verification FAILED: {check['name']}")
-                        else:
-                             log(f"Verification PASSED: {check['name']}")
-
                     elif step_type == "priv_mode":
                          cmd = step.get("content") or step.get("command")
                          runner.ensure_priv_exec(custom_command=cmd)
@@ -300,6 +320,27 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                          cmd = step.get("content") or step.get("command")
                          runner.exit_config_mode(custom_command=cmd)
                          log(f"Exited config mode (using: {cmd or 'default'}).")
+                
+                # Run all verification steps at the end
+                if verification_steps:
+                    log(f"Running {len(verification_steps)} verification steps...")
+                    checks = []
+                    for i, step in enumerate(verification_steps):
+                        checks.append({
+                            "name": step.get("name", f"Check {i+1}"),
+                            "command": step.get("command", "show run"),
+                            "type": step.get("check_type", "regex_match"),
+                            "pattern": step.get("pattern", ""),
+                            "evidence_lines": step.get("evidence_lines", 3)
+                        })
+                    results = run_verification_checks(runner, checks, target.variables, log_func=log)
+                    target.verification_results = results
+                    
+                    failed_count = sum(1 for r in results if r["status"] in ["fail", "error"])
+                    if failed_count:
+                         log(f"Verification FAILED: {failed_count}/{len(results)} checks failed.")
+                    else:
+                         log("Verification PASSED: All checks passed.")
                 
                 # Final check if any verification failed
                 failed_checks = [c for c in target.verification_results if c["status"] in ["fail", "error"]]
@@ -336,7 +377,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 # Run verification checks
                 if verification_checks:
                     log(f"Running {len(verification_checks)} verification check(s)...")
-                    check_results = run_verification_checks(runner, verification_checks, target.variables)
+                    check_results = run_verification_checks(runner, verification_checks, target.variables, log_func=log)
                     target.verification_results = check_results
                     
                     failed_checks = [c for c in check_results if c["status"] in ["fail", "error"]]

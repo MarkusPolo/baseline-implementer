@@ -8,6 +8,7 @@ type VerificationCheck = {
     check_name: string;
     status: string;
     evidence: string;
+    full_output?: string;
     message: string;
 };
 
@@ -122,14 +123,24 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                                 <div className="flex-1">
                                                     <div className="font-semibold text-neutral-200">{check.check_name}</div>
                                                     <div className="text-neutral-400 mt-1">{check.message}</div>
-                                                    {check.evidence && (
-                                                        <details className="mt-2">
-                                                            <summary className="cursor-pointer text-neutral-500 hover:text-neutral-300">Evidence</summary>
-                                                            <pre className="mt-1 p-2 bg-black/50 rounded text-[10px] font-mono text-neutral-500 overflow-x-auto">
-                                                                {check.evidence}
-                                                            </pre>
-                                                        </details>
-                                                    )}
+                                                    <div className="flex gap-4 mt-2">
+                                                        {check.evidence && (
+                                                            <details className="flex-1">
+                                                                <summary className="cursor-pointer text-[10px] font-bold uppercase text-neutral-500 hover:text-neutral-300">Evidence</summary>
+                                                                <pre className="mt-1 p-2 bg-black/50 rounded text-[10px] font-mono text-emerald-400/80 overflow-x-auto border border-neutral-800">
+                                                                    {check.evidence}
+                                                                </pre>
+                                                            </details>
+                                                        )}
+                                                        {check.full_output && (
+                                                            <details className="flex-1">
+                                                                <summary className="cursor-pointer text-[10px] font-bold uppercase text-neutral-500 hover:text-neutral-300">Full Output</summary>
+                                                                <pre className="mt-1 p-2 bg-black/50 rounded text-[10px] font-mono text-neutral-400 overflow-x-auto border border-neutral-800 max-h-64">
+                                                                    {check.full_output}
+                                                                </pre>
+                                                            </details>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

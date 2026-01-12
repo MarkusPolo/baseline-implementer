@@ -58,11 +58,36 @@ class CommandRunner:
         # Unknown prompt style
         raise RuntimeError(f"Could not determine prompt state. Buffer tail:\n{buf[-400:]}")
 
-    def run_show(self, cmd: str, timeout: float = 20.0) -> str:
+    def run_show(self, cmd: str, timeout: float = 30.0) -> str:
+        """
+        Execute a show command and handle pagination prompts automatically.
+        """
         self.session.send_line(cmd)
-        # capture until we return to privileged prompt
-        out = self.session.wait_for(self.detector.PROMPT_PRIV, timeout=timeout)
-        return out
+        
+        full_output = ""
+        end_time = time.monotonic() + timeout
+        
+        while time.monotonic() < end_time:
+            # Read available data
+            chunk = self.session.read_available()
+            if not chunk:
+                time.sleep(0.1)
+                continue
+            
+            full_output += chunk
+            normalized = self.detector.normalize(full_output)
+            
+            # Check for final prompt (privileged mode)
+            if self.detector.PROMPT_PRIV.search(normalized):
+                return normalized
+            
+            # Check for pagination prompt
+            if self.detector.PROMPT_PAGINATION.search(normalized):
+                # Send space raw (no newline) to get next page
+                self.session.send(" ")
+                time.sleep(0.1)
+                
+        raise TimeoutError(f"Timed out waiting for final prompt after '{cmd}'.\nLast output seen:\n{full_output[-500:]}")
 
     def enter_config_mode(self, custom_command: Optional[str] = None):
         self.ensure_priv_exec()
@@ -94,9 +119,9 @@ class CommandRunner:
     ]
 
     def wait_for_prompt(self, timeout: float = 10.0) -> str:
-        """Wait for any valid prompt to appear and return the buffer."""
+        """Wait for any valid prompt to appear and return the normalized buffer."""
         buf = self.session.wait_for(self.detector.PROMPT_ANY, timeout=timeout)
-        return buf
+        return self.detector.normalize(buf)
 
     def check_for_errors(self, buffer: str) -> Optional[str]:
         """Look for common error patterns in the output buffer."""

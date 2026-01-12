@@ -47,6 +47,13 @@ class SerialSession:
         self.ser.flush()
         time.sleep(self.write_delay)
 
+    def send(self, data: str):
+        if not self.ser:
+            raise RuntimeError("Serial port not open")
+        self.ser.write(data.encode())
+        self.ser.flush()
+        time.sleep(self.write_delay)
+
     def wait_for(self, pattern: re.Pattern, timeout: float = 10.0) -> str:
         buf = ""
         end = time.monotonic() + timeout

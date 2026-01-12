@@ -20,7 +20,8 @@ class PromptDetector:
         "priv": r"(?m)^.*?#\s*$",
         "config": r"(?m)^.*?\(config[^\)]*\)#\s*$",
         "any": r"(?m)^.*?[>#]\s*$",
-        "password": r"(?m)^[Pp]assword:\s*$"
+        "password": r"(?m)^[Pp]assword:\s*$",
+        "pagination": r"(?im)(?:\s*--\s*more\s*--|^\s*more\s*:|(?i)press\s+any\s+key|(?i)press\s+enter|(?i)hit\s+any\s+key|(?i)q\s*=\s*quit|(?i)space\s*bar\s*to\s+continue|(?i)next\s+page|\[\s*more\s*\])"
     }
     
     def __init__(self, patterns: Optional[Dict[str, str]] = None):
@@ -28,7 +29,7 @@ class PromptDetector:
         Initialize PromptDetector with custom or default patterns.
         
         Args:
-            patterns: Dict with keys 'user', 'priv', 'config', 'any', 'password'
+            patterns: Dict with keys 'user', 'priv', 'config', 'any', 'password', 'pagination'
         """
         p = self.DEFAULT_PATTERNS.copy()
         if patterns:
@@ -40,18 +41,41 @@ class PromptDetector:
         self.PROMPT_CONF = re.compile(p["config"], flags)
         self.PROMPT_ANY = re.compile(p["any"], flags)
         self.PROMPT_PWD = re.compile(p["password"], flags)
+        self.PROMPT_PAGINATION = re.compile(p["pagination"], flags)
         
         # Combined pattern for privilege escalation
         self.PROMPT_PRIV_OR_PWD = re.compile(f"({p['priv']})|({p['password']})", flags)
     
+    @staticmethod
+    def normalize(text: str) -> str:
+        """
+        Normalize CLI output by stripping ANSI codes, backspaces, and normalizing newlines.
+        """
+        # Strip ANSI escape sequences
+        text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
+        
+        # Handle backspaces (repeatedly apply to handle multiple backspaces)
+        while '\x08' in text:
+            new_text = re.sub(r'.\x08', '', text, count=1)
+            if new_text == text:
+                text = text.replace('\x08', '')
+                break
+            text = new_text
+
+        # Normalize CRLF to LF
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
+        
+        return text
+
     def detect(self, buffer: str) -> PromptType:
         """
         Analyze the end of the buffer to determine the current prompt state.
         """
-        if self.PROMPT_CONF.search(buffer):
+        normalized = self.normalize(buffer)
+        if self.PROMPT_CONF.search(normalized):
             return PromptType.CONFIG
-        if self.PROMPT_PRIV.search(buffer):
+        if self.PROMPT_PRIV.search(normalized):
             return PromptType.PRIV
-        if self.PROMPT_USER.search(buffer):
+        if self.PROMPT_USER.search(normalized):
             return PromptType.USER
         return PromptType.UNKNOWN

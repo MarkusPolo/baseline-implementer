@@ -41,8 +41,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
 
         // Connect to WebSocket
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        // Adjust host/port if needed. Assuming backend runs on same host, port 8000 for now or proxy
-        const wsUrl = `${protocol}//${window.location.hostname}:8000/api/console/ws/${portId}`;
+        const wsUrl = `${protocol}//${window.location.host}/api/console/ws/${portId}`;
         const socket = new WebSocket(wsUrl);
         socketRef.current = socket;
 
@@ -118,7 +117,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             <div className="px-4 py-2 border-b border-neutral-800 flex items-center justify-between bg-neutral-900/50">
                 <div className="flex items-center gap-3">
                     <div className={`h-2 w-2 rounded-full ${status === "connected" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
-                            status === "connecting" ? "bg-amber-500 animate-pulse" : "bg-rose-500"
+                        status === "connecting" ? "bg-amber-500 animate-pulse" : "bg-rose-500"
                         }`} />
                     <span className="text-xs font-medium text-neutral-400">Port {portId} - Live Console</span>
                 </div>

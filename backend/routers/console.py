@@ -4,7 +4,7 @@ import os
 import serial
 from serial_lib.serial_session import SerialSession
 
-router = APIRouter(prefix="/api/console", tags=["console"])
+router = APIRouter(prefix="/console", tags=["console"])
 
 # In-memory lock for active console sessions in this process
 # Note: For multi-process/worker setups, a file-based or Redis-based lock should be used.

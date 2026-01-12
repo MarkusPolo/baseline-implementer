@@ -4,7 +4,7 @@ from typing import List
 from ..database import SessionLocal
 from .. import models, schemas
 
-router = APIRouter(prefix="/api/macros", tags=["macros"])
+router = APIRouter(prefix="/macros", tags=["macros"])
 
 def get_db():
     db = SessionLocal()

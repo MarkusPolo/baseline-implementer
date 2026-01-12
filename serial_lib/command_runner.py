@@ -85,3 +85,7 @@ class CommandRunner:
         # Let's match PROMPT_ANY to be safe or just drain.
         self.session.drain(0.5)
 
+    def wait_for_prompt(self, timeout: float = 10.0):
+        """Wait for any valid prompt to appear."""
+        self.session.wait_for(self.detector.PROMPT_ANY, timeout=timeout)
+

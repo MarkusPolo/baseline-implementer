@@ -24,7 +24,8 @@ export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps
         initialSteps.map(cmd => ({ type: "send", cmd, wait_prompt: true }))
     );
 
-    // Redaction Rules
+    // Redaction Rules 
+    // ... (Keep existing rules)
     const REDACTION_RULES = [
         { regex: /(password\s+)(\S+)/gi, replace: "$1{{password}}" },
         { regex: /(secret\s+)(\S+)/gi, replace: "$1{{secret}}" },
@@ -62,11 +63,14 @@ export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps
         return schema;
     };
 
+    const detectedVariables = Object.keys(generateSchema(steps).properties);
+
     const suggestVariables = () => {
         const newSteps = steps.map(step => {
             let newCmd = step.cmd;
             newCmd = newCmd.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, "{{ip_address}}");
             newCmd = newCmd.replace(/(vlan\s+)(\d+)/i, "$1{{vlan_id}}");
+            newCmd = newCmd.replace(/(hostname\s+)(\S+)/i, "$1{{hostname}}");
             return { ...step, cmd: newCmd };
         });
         setSteps(newSteps);
@@ -111,7 +115,7 @@ export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps
                     >
                         <ArrowLeft className="h-5 w-5" />
                     </button>
-                    <h2 className="text-2xl font-bold text-white">Macro Editor</h2>
+                    <h2 className="text-2xl font-bold text-white">Template Editor</h2>
                 </div>
                 <button
                     onClick={handleSave}
@@ -119,7 +123,7 @@ export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps
                     className="flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-900/20 disabled:opacity-50"
                 >
                     <Save className="h-4 w-4" />
-                    Save Macro
+                    Save Template
                 </button>
             </div>
 
@@ -127,7 +131,7 @@ export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps
                 {/* Metadata */}
                 <div className="space-y-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-neutral-400">Macro Name</label>
+                        <label className="text-sm font-medium text-neutral-400">Template Name</label>
                         <input
                             type="text"
                             value={name}
@@ -141,10 +145,26 @@ export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="What does this macro do?"
+                            placeholder="What does this template do?"
                             rows={4}
                             className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                         />
+                    </div>
+
+                    {/* Detected Variables Feedback */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Detected Variables</label>
+                        <div className="flex flex-wrap gap-2 min-h-[40px] p-2 bg-neutral-900/50 rounded-lg border border-neutral-800">
+                            {detectedVariables.length === 0 ? (
+                                <span className="text-xs text-neutral-600 italic">No variables detected. Add {"{{var}}"}.</span>
+                            ) : (
+                                detectedVariables.map(v => (
+                                    <span key={v} className="px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs border border-blue-500/30">
+                                        {v}
+                                    </span>
+                                ))
+                            )}
+                        </div>
                     </div>
 
                     <div className="space-y-3 pt-4 border-t border-neutral-800">
@@ -186,7 +206,14 @@ export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps
                                 <div className="flex items-center justify-between gap-4">
                                     <div className="flex items-center gap-3">
                                         <div className="flex flex-col gap-1 items-center bg-neutral-800/50 rounded p-1">
-                                            <GripVertical className="h-4 w-4 text-neutral-600" />
+                                            <div className="flex flex-col gap-0.5">
+                                                <button onClick={() => moveStep(i, "up")} className="p-0.5 hover:text-white text-neutral-600 disabled:opacity-30" disabled={i === 0}>
+                                                    <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[6px] border-b-current"></div>
+                                                </button>
+                                                <button onClick={() => moveStep(i, "down")} className="p-0.5 hover:text-white text-neutral-600 disabled:opacity-30" disabled={i === steps.length - 1}>
+                                                    <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[6px] border-t-current"></div>
+                                                </button>
+                                            </div>
                                         </div>
                                         <select
                                             value={step.type}

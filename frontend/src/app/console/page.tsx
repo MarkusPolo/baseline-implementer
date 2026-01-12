@@ -34,15 +34,27 @@ export default function ConsolePage() {
         setRecordedCommands([]);
     };
 
-    const handleSaveMacro = async (name: string, description: string, steps: any[]) => {
+    const handleSaveTemplate = async (name: string, description: string, steps: any[], schema: any) => {
         try {
-            const response = await fetch("/api/macros/", {
+            // Construct Jinja2 body from steps
+            const body = steps
+                .filter(s => s.type === "send")
+                .map(s => s.cmd)
+                .join("\n");
+
+            const response = await fetch("/api/templates/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, description, steps }),
+                body: JSON.stringify({
+                    name,
+                    body: `! Description: ${description}\n${body}`,
+                    steps,
+                    config_schema: schema,
+                    is_baseline: 0
+                }),
             });
             if (response.ok) {
-                alert("Macro saved successfully!");
+                alert("Template saved successfully!");
                 setIsEditing(false);
                 setRecordedCommands([]);
             } else {
@@ -50,7 +62,7 @@ export default function ConsolePage() {
                 alert(`Error: ${JSON.stringify(err.detail)}`);
             }
         } catch (error) {
-            alert("Failed to save macro. Is the backend running?");
+            alert("Failed to save template. Is the backend running?");
         }
     };
 
@@ -59,7 +71,7 @@ export default function ConsolePage() {
             <div className="mx-auto max-w-4xl">
                 <MacroEditor
                     initialSteps={recordedCommands}
-                    onSave={handleSaveMacro}
+                    onSave={handleSaveTemplate}
                     onCancel={() => setIsEditing(false)}
                 />
             </div>
@@ -162,7 +174,7 @@ export default function ConsolePage() {
                                     className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
                                 >
                                     <Save className="h-4 w-4" />
-                                    Save as Macro Draft
+                                    Save as Template
                                 </button>
                             </div>
                         )}

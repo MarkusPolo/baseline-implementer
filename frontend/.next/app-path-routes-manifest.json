@@ -1,10 +1,13 @@
 {
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
+  "/console/page": "/console",
   "/favicon.ico/route": "/favicon.ico",
   "/jobs/[id]/page": "/jobs/[id]",
   "/jobs/new/page": "/jobs/new",
   "/jobs/page": "/jobs",
+  "/macros/deploy/[id]/page": "/macros/deploy/[id]",
+  "/macros/page": "/macros",
   "/page": "/",
   "/profiles/page": "/profiles",
   "/settings/page": "/settings",

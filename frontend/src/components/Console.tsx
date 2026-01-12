@@ -18,6 +18,12 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
     const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
     const [lineBuffer, setLineBuffer] = useState("");
 
+    const onCommandRef = useRef(onCommand);
+
+    useEffect(() => {
+        onCommandRef.current = onCommand;
+    }, [onCommand]);
+
     useEffect(() => {
         if (!terminalRef.current) return;
 
@@ -75,9 +81,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             }
 
             // Recording logic (Line Discipline)
-            if (onCommand) {
-                handleRecordingInput(data);
-            }
+            handleRecordingInput(data);
         });
 
         let currentLine = "";
@@ -85,7 +89,8 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             for (const char of data) {
                 if (char === "\r" || char === "\n") {
                     if (currentLine.trim()) {
-                        onCommand?.(currentLine.trim());
+                        // Use ref here
+                        onCommandRef.current?.(currentLine.trim());
                     }
                     currentLine = "";
                 } else if (char === "\x7f") { // Backspace
@@ -110,7 +115,8 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             term.dispose();
             resizeObserver.disconnect();
         };
-    }, [portId, onCommand]);
+        // Removed onCommand from dependencies
+    }, [portId]);
 
     return (
         <div className={`flex flex-col rounded-xl overflow-hidden border border-neutral-800 bg-[#0a0a0a] shadow-2xl ${className}`}>

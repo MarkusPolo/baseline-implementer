@@ -22,7 +22,7 @@ export default function MacrosPage() {
 
     const fetchMacros = async () => {
         try {
-            const response = await fetch("http://localhost:8000/api/macros/");
+            const response = await fetch("/api/macros/");
             const data = await response.json();
             setMacros(data);
         } catch (error) {
@@ -35,7 +35,7 @@ export default function MacrosPage() {
     const deleteMacro = async (id: number) => {
         if (!confirm("Are you sure you want to delete this macro?")) return;
         try {
-            await fetch(`http://localhost:8000/api/macros/${id}`, { method: "DELETE" });
+            await fetch(`/api/macros/${id}`, { method: "DELETE" });
             setMacros(macros.filter((m) => m.id !== id));
         } catch (error) {
             alert("Failed to delete macro.");

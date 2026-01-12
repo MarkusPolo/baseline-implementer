@@ -30,7 +30,7 @@ export default function DeployMacroPage() {
 
     const fetchMacro = async () => {
         try {
-            const response = await fetch(`http://localhost:8000/api/macros/${macroId}`);
+            const response = await fetch(`/api/macros/${macroId}`);
             const data = await response.json();
             setMacro(data);
 
@@ -79,7 +79,7 @@ export default function DeployMacroPage() {
 
         setIsDeploying(true);
         try {
-            const response = await fetch("http://localhost:8000/api/jobs/", {
+            const response = await fetch("/api/jobs/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -195,8 +195,8 @@ export default function DeployMacroPage() {
                                         key={i}
                                         onClick={() => togglePort(portNum)}
                                         className={`p-4 rounded-xl border transition-all text-center group relative overflow-hidden ${isSelected
-                                                ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-900/40"
-                                                : "bg-neutral-900 border-neutral-800 hover:border-neutral-700"
+                                            ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-900/40"
+                                            : "bg-neutral-900 border-neutral-800 hover:border-neutral-700"
                                             }`}
                                     >
                                         <div className={`text-lg font-bold mb-1 ${isSelected ? "text-white" : "text-neutral-400"}`}>

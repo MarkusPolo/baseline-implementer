@@ -19,6 +19,7 @@ active_consoles = set()
 
 @router.websocket("/ws/{port_id}")
 async def console_websocket(websocket: WebSocket, port_id: str):
+    port_path = os.path.expanduser(f"~/port{port_id}")
     print(f"debug: WebSocket connected for {port_path}", flush=True)
 
     if port_path in active_consoles:

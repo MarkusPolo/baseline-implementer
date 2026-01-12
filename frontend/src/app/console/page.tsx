@@ -36,7 +36,7 @@ export default function ConsolePage() {
 
     const handleSaveMacro = async (name: string, description: string, steps: any[]) => {
         try {
-            const response = await fetch("http://localhost:8000/api/macros/", {
+            const response = await fetch("/api/macros/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name, description, steps }),

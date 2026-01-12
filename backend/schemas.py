@@ -65,15 +65,35 @@ class JobTarget(JobTargetBase):
         from_attributes = True
 
 class JobCreate(BaseModel):
-    template_id: int
+    template_id: Optional[int] = None
+    macro_id: Optional[int] = None
     targets: List[JobTargetCreate]
 
 class Job(BaseModel):
     id: int
-    template_id: int
+    template_id: Optional[int] = None
+    macro_id: Optional[int] = None
     status: str
     created_at: datetime.datetime
     targets: List[JobTarget] = []
 
     class Config:
         from_attributes = True
+
+# Macro Schemas
+class MacroBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    steps: List[Dict[str, Any]]
+    config_schema: Optional[Dict[str, Any]] = None
+
+class MacroCreate(MacroBase):
+    pass
+
+class Macro(MacroBase):
+    id: int
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+

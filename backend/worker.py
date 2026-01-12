@@ -235,17 +235,18 @@ def execute_job(self, job_id: int):
         job.status = "running"
         db.commit()
 
-        template_body = job.template.body
-        verification_checks = job.template.verification or []
+        template_body = job.template.body if job.template else None
+        verification_checks = (job.template.verification if job.template else []) or []
+        macro_steps = job.macro.steps if job.macro else None
         
         # Load device profile if specified
         profile = None
-        if job.template.profile_id:
+        if job.template and job.template.profile_id:
             profile = db.query(models.DeviceProfile).filter(models.DeviceProfile.id == job.template.profile_id).first()
         
         # Simple sequential execution for MVP
         for target in job.targets:
-            process_target(db, target, template_body, verification_checks, profile)
+            process_target(db, target, template_body, verification_checks, profile, macro_steps)
         
         # Check overall status
         failed = any(t.status == "failed" for t in job.targets)
@@ -255,7 +256,7 @@ def execute_job(self, job_id: int):
     finally:
         db.close()
 
-def process_target(db: Session, target: models.JobTarget, template_body: str, verification_checks: list, profile=None):
+def process_target(db: Session, target: models.JobTarget, template_body: str, verification_checks: list, profile=None, macro_steps=None):
     target.status = "running"
     db.commit()
     
@@ -293,31 +294,64 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             log("Attempted to disable pagination for the session.")
             
             # 3. Execute Steps (New Logic) or Template Body (Old Logic)
-            if target.job.template.steps:
+            active_steps = macro_steps or (target.job.template.steps if target.job.template else None)
+            
+            if active_steps:
                 # Separate execution steps from verification checks
-                execution_steps = [s for s in target.job.template.steps if s.get("type") != "verify"]
-                verification_steps = [s for s in target.job.template.steps if s.get("type") == "verify"]
+                execution_steps = [s for s in active_steps if s.get("type") != "verify"]
+                verification_steps = [s for s in active_steps if s.get("type") == "verify"]
                 
                 log(f"Executing {len(execution_steps)} configuration steps...")
                 target.verification_results = []
                 
                 for i, step in enumerate(execution_steps):
-                    step_type = step.get("type", "command")
+                    step_type = step.get("type", "send")
                     log(f"Step {i+1}: {step_type}")
                     
-                    if step_type == "command":
-                        cmd_template = step.get("content", "")
+                    if step_type == "send":
+                        cmd_template = step.get("cmd", step.get("content", ""))
                         rendered_cmd = env.from_string(cmd_template).render(**target.variables)
                         session.send_line(rendered_cmd)
-                        # Wait for prompt after command
-                        out = runner.wait_for_prompt()
-                        log(f"Sent: {rendered_cmd}")
+                        # Wait for prompt after command if specified
+                        if step.get("wait_prompt", True):
+                            out = runner.wait_for_prompt()
+                            log(f"Sent: {rendered_cmd}")
+                            # Check for errors in output
+                            error_msg = runner.check_for_errors(out)
+                            if error_msg:
+                                 log(f"WARNING: {error_msg}")
+                        else:
+                            log(f"Sent (no wait): {rendered_cmd}")
+                    
+                    elif step_type == "expect":
+                        pattern_template = step.get("pattern", "")
+                        response_template = step.get("response", "")
                         
-                        # Check for errors in output
-                        error_msg = runner.check_for_errors(out)
-                        if error_msg:
-                             log(f"WARNING: {error_msg}")
+                        pattern = env.from_string(pattern_template).render(**target.variables)
+                        response = env.from_string(response_template).render(**target.variables)
                         
+                        log(f"Waiting for pattern: {pattern}")
+                        # Use session.read_until or similar if available, or session.read with timeout
+                        # CommandRunner doesn't have a direct 'expect', so we'll use a simple loop
+                        found = False
+                        start_time = time.time()
+                        buffer = ""
+                        while time.time() - start_time < 30: # 30s timeout
+                            chunk = session.read()
+                            if chunk:
+                                buffer += chunk
+                                if re.search(pattern, buffer):
+                                    found = True
+                                    break
+                            time.sleep(0.1)
+                        
+                        if found:
+                            log(f"Found pattern. Sending response: {response}")
+                            session.send_line(response)
+                            # Usually expect/send is followed by another prompt or another expect
+                        else:
+                            raise TimeoutError(f"Timeout waiting for pattern: {pattern}")
+
                     elif step_type == "priv_mode":
                          cmd = step.get("content") or step.get("command")
                          runner.ensure_priv_exec(custom_command=cmd)

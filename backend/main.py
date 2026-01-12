@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .routers import templates, jobs, profiles
+from .routers import templates, jobs, profiles, console, macros
 
 # Create DB tables
 Base.metadata.create_all(bind=engine)
@@ -19,6 +19,8 @@ app.add_middleware(
 app.include_router(templates.router)
 app.include_router(jobs.router)
 app.include_router(profiles.router)
+app.include_router(console.router)
+app.include_router(macros.router)
 
 @app.get("/")
 def read_root():

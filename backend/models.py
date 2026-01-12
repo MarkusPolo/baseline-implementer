@@ -38,11 +38,13 @@ class Job(Base):
     __tablename__ = "jobs"
 
     id = Column(Integer, primary_key=True, index=True)
-    template_id = Column(Integer, ForeignKey("templates.id"))
+    template_id = Column(Integer, ForeignKey("templates.id"), nullable=True)
+    macro_id = Column(Integer, ForeignKey("macros.id"), nullable=True)
     status = Column(String, default="queued") # queued, running, completed, failed
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     template = relationship("Template", back_populates="jobs")
+    macro = relationship("Macro") # Add relationship to Macro
     targets = relationship("JobTarget", back_populates="job")
 
 class JobTarget(Base):
@@ -61,3 +63,14 @@ class JobTarget(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
     job = relationship("Job", back_populates="targets")
+
+class Macro(Base):
+    __tablename__ = "macros"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    description = Column(Text, nullable=True)
+    steps = Column(JSON, nullable=False) # List of steps {type, cmd, wait_prompt, etc.}
+    config_schema = Column(JSON, nullable=True) # JSON schema for variables
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+

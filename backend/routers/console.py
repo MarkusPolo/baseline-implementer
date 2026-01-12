@@ -4,9 +4,12 @@ import os
 import serial
 from serial_lib.serial_session import SerialSession
 
-router = APIRouter(tags=["console"])
+router = APIRouter(
+    prefix="/console",
+    tags=["console"]
+)
 
-@router.get("/console/test")
+@router.get("/test")
 def test_console():
     return {"status": "console router reachable"}
 
@@ -14,7 +17,7 @@ def test_console():
 # Note: For multi-process/worker setups, a file-based or Redis-based lock should be used.
 active_consoles = set()
 
-@router.websocket("/console/ws/{port_id}")
+@router.websocket("/ws/{port_id}")
 async def console_websocket(websocket: WebSocket, port_id: str):
     # Port ID is usually 1-16, mapping to ~/port1 etc.
     port_path = os.path.expanduser(f"~/port{port_id}")

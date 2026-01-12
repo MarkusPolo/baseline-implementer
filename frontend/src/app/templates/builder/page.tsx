@@ -304,13 +304,12 @@ export default function TemplateBuilder() {
                                                 </select>
                                             </div>
                                             <div className="col-span-2">
-                                                <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">Expected Pattern</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="vlan 10 or {{ vlan_id }}"
+                                                <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">Expected Pattern (Regex)</label>
+                                                <textarea
+                                                    placeholder="vlan 10 or {{ vlan_id }}\n  description {{ desc }}\n!"
                                                     value={step.pattern}
                                                     onChange={(e) => updateStep(step.id, { pattern: e.target.value })}
-                                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm font-mono text-orange-400 focus:outline-none focus:border-blue-500"
+                                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-sm font-mono text-orange-400 focus:outline-none focus:border-blue-500 min-h-[100px]"
                                                 />
                                             </div>
                                         </div>

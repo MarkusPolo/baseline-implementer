@@ -85,7 +85,26 @@ class CommandRunner:
         # Let's match PROMPT_ANY to be safe or just drain.
         self.session.drain(0.5)
 
-    def wait_for_prompt(self, timeout: float = 10.0):
-        """Wait for any valid prompt to appear."""
-        self.session.wait_for(self.detector.PROMPT_ANY, timeout=timeout)
+    # Common CLI errors
+    ERROR_PATTERNS = [
+        re.compile(r"% Invalid input detected", re.I),
+        re.compile(r"% Incomplete command", re.I),
+        re.compile(r"% Ambiguous command", re.I),
+        re.compile(r"Error:", re.I)
+    ]
+
+    def wait_for_prompt(self, timeout: float = 10.0) -> str:
+        """Wait for any valid prompt to appear and return the buffer."""
+        buf = self.session.wait_for(self.detector.PROMPT_ANY, timeout=timeout)
+        return buf
+
+    def check_for_errors(self, buffer: str) -> Optional[str]:
+        """Look for common error patterns in the output buffer."""
+        for pattern in self.ERROR_PATTERNS:
+            match = pattern.search(buffer)
+            if match:
+                # Return the line containing the error
+                lines = buffer[match.start():].splitlines()
+                return lines[0] if lines else "Unknown error"
+        return None
 

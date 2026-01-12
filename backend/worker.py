@@ -143,7 +143,9 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
             }
 
             if check_type == "regex_match":
-                match = re.search(pattern, output, re.MULTILINE)
+                # Use re.DOTALL (re.S) to allow . to match newlines for multi-line verification
+                flags = re.MULTILINE | re.DOTALL if "\n" in pattern else re.MULTILINE
+                match = re.search(pattern, output, flags)
                 if match:
                     # Extract evidence
                     lines = output.splitlines()
@@ -165,7 +167,8 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
                     })
                     
             elif check_type == "regex_not_present":
-                match = re.search(pattern, output, re.MULTILINE)
+                flags = re.MULTILINE | re.DOTALL if "\n" in pattern else re.MULTILINE
+                match = re.search(pattern, output, flags)
                 if not match:
                     res.update({
                         "status": "pass",
@@ -303,8 +306,13 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                         rendered_cmd = env.from_string(cmd_template).render(**target.variables)
                         session.send_line(rendered_cmd)
                         # Wait for prompt after command
-                        runner.wait_for_prompt()
+                        out = runner.wait_for_prompt()
                         log(f"Sent: {rendered_cmd}")
+                        
+                        # Check for errors in output
+                        error_msg = runner.check_for_errors(out)
+                        if error_msg:
+                             log(f"WARNING: {error_msg}")
                         
                     elif step_type == "priv_mode":
                          cmd = step.get("content") or step.get("command")

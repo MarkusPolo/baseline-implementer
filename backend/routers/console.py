@@ -13,6 +13,23 @@ router = APIRouter(
 def test_console():
     return {"status": "console router reachable"}
 
+@router.get("/ports")
+def list_ports():
+    ports = []
+    # Check ports 1-16
+    for i in range(1, 17):
+        port_path = os.path.expanduser(f"~/port{i}")
+        exists = os.path.exists(port_path)
+        is_busy = port_path in active_consoles
+        
+        ports.append({
+            "id": i,
+            "path": port_path,
+            "connected": exists, # "connected" means the device/symlink exists
+            "busy": is_busy
+        })
+    return ports
+
 # In-memory lock for active console sessions in this process
 # Note: For multi-process/worker setups, a file-based or Redis-based lock should be used.
 active_consoles = set()

@@ -1,14 +1,6 @@
-# What is working:
-- Working, really stable Live Console
-- Creation of Macro without errors
-
-# What is not working:
-- auto redact secrets button
-- auto suggest variables button
-- the user doesn't know how to set variables
-- there needs to be a feedback for what variables have been recognized (like in the normal template builder)
-- Rename "Macro" to "Template" to be consistent with the rest of the application.
-
-# What is not working (high priority):
-- When I save the macro, it's nowhere to be found. I cant use this "macro". I'd like to have it exactly like the Templates that i have right now. So the same format (i think jinja2 but please verify) and the same location (in the same folder as the templates, and the same place in the frontend).
-- When creating a job and selection the ports that will get the template, you can enter the variables. Just like the normal Templates now.
+- Sometimes the job will fail, because the Switch was sleeping. I need to add 3 "returns" and some waiting time to the beginning of the template.
+- Editing a template is not possible
+- When alot of people are using the application, there will be alot of templates. I need a way to have it more organized.
+- Some switches do not accept backspaces. I know Cisco Switches sometimes need CTRL+H to delete a character. I'm thinking of adding a Backspace Translator to the Live Console UI -> User could create "translations" or "Hotkey like" on his own. He could say: Backspace is now CTRL+H (UI is asking the user to press the button or button combination for input)
+- Live Console should have tabs for different sessions with different ports
+- Live console should have a different UI for selecting the Port. It should autodetect if something is plugged in at that port and if somebody is already using it. If not, it should show a button to connect to it.

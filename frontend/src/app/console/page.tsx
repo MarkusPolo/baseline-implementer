@@ -3,40 +3,77 @@
 import React, { useState } from "react";
 import { Console } from "@/components/Console";
 import { MacroEditor } from "@/components/MacroEditor";
-import { Save, Trash2, Play, Circle, Square, Activity } from "lucide-react";
+import { Save, Trash2, Play, Plus, X, Monitor } from "lucide-react";
+
+import { PortSelector } from "@/components/PortSelector";
+
+interface ConsoleSession {
+    id: string;
+    portId: number;
+    name: string;
+}
 
 export default function ConsolePage() {
-    const [selectedPort, setSelectedPort] = useState<string>("1");
-    const [isRecording, setIsRecording] = useState(false);
-    const [recordedCommands, setRecordedCommands] = useState<string[]>([]);
-    const [sessionActive, setSessionActive] = useState(false);
+    const [sessions, setSessions] = useState<ConsoleSession[]>([]);
+    const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+    const [showSelector, setShowSelector] = useState(true);
+
+    // Recording State (Per session)
+    const [isRecording, setIsRecording] = useState(false); // Global toggle for now, or per session? Global is easier.
+    const [recordings, setRecordings] = useState<Record<string, string[]>>({});
     const [isEditing, setIsEditing] = useState(false);
 
+    // Derived stats
+    const recordedCommands = (activeSessionId && recordings[activeSessionId]) || [];
+
     const handleCommand = (cmd: string) => {
-        if (isRecording) {
-            setRecordedCommands((prev) => [...prev, cmd]);
+        if (isRecording && activeSessionId) {
+            setRecordings(prev => ({
+                ...prev,
+                [activeSessionId]: [...(prev[activeSessionId] || []), cmd]
+            }));
         }
     };
 
-    const startSession = () => {
-        setSessionActive(true);
-        setRecordedCommands([]);
-        setIsRecording(true);
-        setIsEditing(false);
+    const clearActiveRecording = () => {
+        if (activeSessionId) {
+            setRecordings(prev => ({
+                ...prev,
+                [activeSessionId]: []
+            }));
+        }
     };
 
-    const stopSession = () => {
-        setSessionActive(false);
-        setIsRecording(false);
+    const addSession = (portId: number) => {
+        const newSession = {
+            id: Math.random().toString(36).substr(2, 9),
+            portId,
+            name: `Port ${portId}`
+        };
+        setSessions([...sessions, newSession]);
+        setActiveSessionId(newSession.id);
+        setShowSelector(false);
     };
 
-    const clearRecording = () => {
-        setRecordedCommands([]);
+    const closeSession = (e: React.MouseEvent, sessionId: string) => {
+        e.stopPropagation();
+        const newSessions = sessions.filter(s => s.id !== sessionId);
+        setSessions(newSessions);
+        if (activeSessionId === sessionId) {
+            if (newSessions.length > 0) {
+                setActiveSessionId(newSessions[newSessions.length - 1].id);
+            } else {
+                setActiveSessionId(null);
+                setShowSelector(true);
+                // Stop recording and clear commands if no sessions are active
+                setIsRecording(false);
+                // setRecordedCommands([]);
+            }
+        }
     };
 
     const handleSaveTemplate = async (name: string, description: string, steps: any[], schema: any) => {
         try {
-            // Construct Jinja2 body from steps
             const body = steps
                 .filter(s => s.type === "send")
                 .map(s => s.cmd)
@@ -56,7 +93,7 @@ export default function ConsolePage() {
             if (response.ok) {
                 alert("Template saved successfully!");
                 setIsEditing(false);
-                setRecordedCommands([]);
+                clearActiveRecording();
             } else {
                 const err = await response.json();
                 alert(`Error: ${JSON.stringify(err.detail)}`);
@@ -80,126 +117,143 @@ export default function ConsolePage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col gap-6">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-white">Live Console</h1>
-                    <p className="text-neutral-400">Interactive serial session with recording.</p>
+                    <p className="text-neutral-400">Interactive serial session manager.</p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    {!sessionActive ? (
-                        <div className="flex items-center gap-2">
-                            <select
-                                value={selectedPort}
-                                onChange={(e) => setSelectedPort(e.target.value)}
-                                className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                {[...Array(16)].map((_, i) => (
-                                    <option key={i + 1} value={i + 1}>Port {i + 1}</option>
-                                ))}
-                            </select>
+                {/* Tabs & Toolbar */}
+                <div className="flex items-center gap-2 border-b border-neutral-800 pb-1 overflow-x-auto">
+                    {sessions.map(session => (
+                        <div
+                            key={session.id}
+                            onClick={() => { setActiveSessionId(session.id); setShowSelector(false); }}
+                            className={`
+                                group flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium cursor-pointer transition-colors border-b-2
+                                ${activeSessionId === session.id && !showSelector
+                                    ? "bg-neutral-900 border-blue-500 text-white"
+                                    : "border-transparent text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50"}
+                            `}
+                        >
+                            <Monitor className="h-4 w-4" />
+                            {session.name}
                             <button
-                                onClick={startSession}
-                                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20"
+                                onClick={(e) => closeSession(e, session.id)}
+                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-neutral-800 rounded text-neutral-500 hover:text-rose-500"
                             >
-                                <Play className="h-4 w-4" />
-                                Start Session
+                                <X className="h-3 w-3" />
                             </button>
                         </div>
-                    ) : (
-                        <button
-                            onClick={stopSession}
-                            className="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 transition-colors shadow-lg shadow-rose-900/20"
-                        >
-                            <Square className="h-4 w-4" />
-                            Stop Session
-                        </button>
-                    )}
-                </div>
-            </div>
+                    ))}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Console View */}
-                <div className="lg:col-span-2 space-y-4">
-                    {sessionActive ? (
-                        <Console portId={selectedPort} onCommand={handleCommand} className="h-[600px]" />
-                    ) : (
-                        <div className="h-[600px] flex flex-col items-center justify-center rounded-xl border border-neutral-800 bg-neutral-900/30 text-neutral-500 border-dashed">
-                            <div className="p-4 rounded-full bg-neutral-800/50 mb-4">
-                                <ActivityIcon className="h-8 w-8" />
-                            </div>
-                            <p>Select a port and click "Start Session" to begin.</p>
+                    <button
+                        onClick={() => setShowSelector(true)}
+                        className={`
+                            flex items-center gap-2 px-3 py-2 rounded-t-lg text-sm font-medium transition-colors border-b-2 border-transparent
+                            ${showSelector ? "bg-neutral-900 border-blue-500 text-white" : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50"}
+                        `}
+                    >
+                        <Plus className="h-4 w-4" />
+                        New Session
+                    </button>
+
+                    {/* Recording Controls (Right aligned) */}
+                    {!showSelector && activeSessionId && (
+                        <div className="ml-auto flex items-center gap-3">
+                            <div className={`h-2 w-2 rounded-full ${isRecording ? 'bg-rose-500 animate-pulse' : 'bg-neutral-800'}`} />
+                            <span className="text-xs text-neutral-500 uppercase font-bold tracking-wider">
+                                {isRecording ? "Recording" : "Ready"}
+                            </span>
+                            <button
+                                onClick={() => setIsRecording(!isRecording)}
+                                className={`
+                                   px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-colors
+                                   ${isRecording
+                                        ? "bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.2)]"
+                                        : "bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white"}
+                               `}
+                            >
+                                {isRecording ? "Stop Rec" : "Record"}
+                            </button>
                         </div>
                     )}
                 </div>
 
-                {/* Recording Panel */}
-                <div className="flex flex-col gap-4">
-                    <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 overflow-hidden flex flex-col h-full max-h-[600px]">
-                        <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between bg-neutral-900">
-                            <div className="flex items-center gap-2">
-                                <div className={`h-2 w-2 rounded-full ${isRecording ? 'bg-rose-500 animate-pulse' : 'bg-neutral-600'}`} />
-                                <h3 className="text-sm font-semibold text-white">Recorded Commands</h3>
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={clearRecording}
-                                    className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
-                                    title="Clear recording"
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </button>
-                            </div>
+                {/* Main Content Area */}
+                <div className="min-h-[600px]">
+                    {showSelector ? (
+                        <div className="animate-in fade-in zoom-in-95 duration-200">
+                            <PortSelector
+                                onSelect={addSession}
+                                activeSessions={sessions.map(s => s.portId)}
+                            />
                         </div>
-
-                        <div className="flex-1 overflow-auto p-4 space-y-2 font-mono text-sm">
-                            {recordedCommands.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-neutral-600 text-xs italic py-12">
-                                    No commands recorded yet.
-                                </div>
-                            ) : (
-                                recordedCommands.map((cmd, i) => (
-                                    <div key={i} className="flex gap-3 group">
-                                        <span className="text-neutral-600 w-4 text-right">{i + 1}</span>
-                                        <span className="text-neutral-300 break-all">{cmd}</span>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                            <div className="lg:col-span-3 bg-black rounded-xl border border-neutral-800 overflow-hidden shadow-2xl relative">
+                                {sessions.map(session => (
+                                    <div
+                                        key={session.id}
+                                        className={activeSessionId === session.id ? "block h-full" : "hidden"}
+                                    >
+                                        <Console
+                                            portId={session.portId.toString()}
+                                            onCommand={activeSessionId === session.id ? handleCommand : undefined}
+                                            className="h-[600px] border-none rounded-none"
+                                        />
                                     </div>
-                                ))
-                            )}
-                        </div>
-
-                        {recordedCommands.length > 0 && (
-                            <div className="p-4 border-t border-neutral-800 bg-neutral-900/50">
-                                <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
-                                >
-                                    <Save className="h-4 w-4" />
-                                    Save as Template
-                                </button>
+                                ))}
                             </div>
-                        )}
-                    </div>
+
+                            {/* Sidebar Recording Panel */}
+                            <div className="flex flex-col gap-4">
+                                <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 overflow-hidden flex flex-col h-[600px]">
+                                    <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between bg-neutral-900">
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-sm font-semibold text-white">Recorded History</h3>
+                                        </div>
+                                        <button
+                                            onClick={clearActiveRecording}
+                                            className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+                                            title="Clear"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex-1 overflow-auto p-4 space-y-2 font-mono text-sm">
+                                        {recordedCommands.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center h-full text-neutral-600 text-xs italic">
+                                                No commands recorded.
+                                            </div>
+                                        ) : (
+                                            recordedCommands.map((cmd, i) => (
+                                                <div key={i} className="flex gap-3 group">
+                                                    <span className="text-neutral-600 w-4 text-right select-none">{i + 1}</span>
+                                                    <span className="text-neutral-300 break-all">{cmd}</span>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+
+                                    {recordedCommands.length > 0 && (
+                                        <div className="p-4 border-t border-neutral-800 bg-neutral-900/50">
+                                            <button
+                                                onClick={() => setIsEditing(true)}
+                                                className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+                                            >
+                                                <Save className="h-4 w-4" />
+                                                Save Template
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
-    );
-}
-
-function ActivityIcon({ className }: { className?: string }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={className}
-        >
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-        </svg>
     );
 }

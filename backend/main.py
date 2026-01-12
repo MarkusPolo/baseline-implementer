@@ -30,3 +30,10 @@ app.include_router(macros.router)
 @app.get("/")
 def read_root():
     return {"message": "Serial Switch Configurator API"}
+
+@app.on_event("startup")
+async def startup_event():
+    print("ALL REGISTERED ROUTES:")
+    for route in app.routes:
+        print(f"Path: {route.path} | Name: {route.name} | Methods: {getattr(route, 'methods', None)}")
+

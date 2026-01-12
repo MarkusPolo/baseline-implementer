@@ -71,7 +71,6 @@ export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps
             newCmd = newCmd.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, "{{ip_address}}");
             newCmd = newCmd.replace(/(vlan\s+)(\d+)/i, "$1{{vlan_id}}");
             newCmd = newCmd.replace(/(hostname\s+)(\S+)/i, "$1{{hostname}}");
-            newCmd = newCmd.replace(/(interface\s+)(\S+)/i, "$1{{interface_name}}");
             newCmd = newCmd.replace(/(description\s+)(\S+)/i, "$1{{interface_description}}");
             newCmd = newCmd.replace(/(ip default-gateway\s+)(\S+)/i, "$1{{default_gateway}}");
             return { ...step, cmd: newCmd };

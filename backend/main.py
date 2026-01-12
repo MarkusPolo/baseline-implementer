@@ -1,3 +1,8 @@
+import os
+import sys
+# Ensure project root is in path for serial_lib imports
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base

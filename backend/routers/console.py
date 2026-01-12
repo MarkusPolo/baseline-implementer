@@ -2,7 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
 import os
 import serial
-from ..serial_lib.serial_session import SerialSession
+from serial_lib.serial_session import SerialSession
 
 router = APIRouter(prefix="/api/console", tags=["console"])
 

@@ -31,7 +31,7 @@ class CommandRunner:
         out += self.session.wait_for(self.detector.PROMPT_ANY, timeout=8.0)
         return out
 
-    def ensure_priv_exec(self):
+    def ensure_priv_exec(self, custom_command: Optional[str] = None):
         buf = self.get_prompted()
 
         prompt_type = self.detector.detect(buf)
@@ -43,7 +43,8 @@ class CommandRunner:
             return
 
         if prompt_type == PromptType.USER:
-            self.session.send_line("en")
+            cmd = custom_command or "en"
+            self.session.send_line(cmd)
             # Wait for either the priv prompt OR a password prompt
             out = self.session.wait_for(self.detector.PROMPT_PRIV_OR_PWD, timeout=10.0)
             
@@ -51,7 +52,7 @@ class CommandRunner:
                 raise RuntimeError("Enable password prompt detected; add password handling.")
             
             if not self.detector.PROMPT_PRIV.search(out):
-                 raise RuntimeError(f"Unexpected response after 'en':\n{out[-400:]}")
+                 raise RuntimeError(f"Unexpected response after '{cmd}':\n{out[-400:]}")
             return
 
         # Unknown prompt style
@@ -63,13 +64,15 @@ class CommandRunner:
         out = self.session.wait_for(self.detector.PROMPT_PRIV, timeout=timeout)
         return out
 
-    def enter_config_mode(self):
+    def enter_config_mode(self, custom_command: Optional[str] = None):
         self.ensure_priv_exec()
-        self.session.send_line("conf t")
+        cmd = custom_command or "conf t"
+        self.session.send_line(cmd)
         self.session.wait_for(self.detector.PROMPT_CONF, timeout=10.0)
 
-    def exit_config_mode(self):
-        self.session.send_line("end")
+    def exit_config_mode(self, custom_command: Optional[str] = None):
+        cmd = custom_command or "end"
+        self.session.send_line(cmd)
         self.session.wait_for(self.detector.PROMPT_PRIV, timeout=10.0)
     
     def disable_paging(self):

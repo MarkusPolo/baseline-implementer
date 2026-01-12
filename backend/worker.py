@@ -287,16 +287,19 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                              log(f"Verification PASSED: {check['name']}")
 
                     elif step_type == "priv_mode":
-                         runner.ensure_priv_exec()
-                         log("Acquired privileged mode.")
+                         cmd = step.get("content") or step.get("command")
+                         runner.ensure_priv_exec(custom_command=cmd)
+                         log(f"Acquired privileged mode (using: {cmd or 'default'}).")
                          
                     elif step_type == "config_mode":
-                         runner.enter_config_mode()
-                         log("Entered config mode.")
+                         cmd = step.get("content") or step.get("command")
+                         runner.enter_config_mode(custom_command=cmd)
+                         log(f"Entered config mode (using: {cmd or 'default'}).")
                          
                     elif step_type == "exit_config":
-                         runner.exit_config_mode()
-                         log("Exited config mode.")
+                         cmd = step.get("content") or step.get("command")
+                         runner.exit_config_mode(custom_command=cmd)
+                         log(f"Exited config mode (using: {cmd or 'default'}).")
                 
                 # Final check if any verification failed
                 failed_checks = [c for c in target.verification_results if c["status"] in ["fail", "error"]]

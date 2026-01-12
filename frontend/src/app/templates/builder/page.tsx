@@ -37,6 +37,12 @@ export default function TemplateBuilder() {
     const [steps, setSteps] = useState<Step[]>([]);
     const [loading, setLoading] = useState(false);
     const [detectedVars, setDetectedVars] = useState<string[]>([]);
+    const [profiles, setProfiles] = useState<any[]>([]);
+    const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
+
+    useEffect(() => {
+        api.get('profiles/').then(res => setProfiles(res.data));
+    }, []);
 
     // Detect variables whenever steps change
     useEffect(() => {
@@ -55,10 +61,27 @@ export default function TemplateBuilder() {
     }, [steps]);
 
     const addStep = (type: StepType) => {
+        let defaultContent = '';
+
+        // Attempt to get default command from profile
+        if (selectedProfileId) {
+            const profile = profiles.find(p => p.id === selectedProfileId);
+            if (profile?.commands) {
+                if (type === 'priv_mode') defaultContent = profile.commands.enable || 'en';
+                if (type === 'config_mode') defaultContent = profile.commands.enter_config || 'conf t';
+                if (type === 'exit_config') defaultContent = profile.commands.exit_config || 'end';
+            }
+        } else {
+            // Fallback defaults
+            if (type === 'priv_mode') defaultContent = 'en';
+            if (type === 'config_mode') defaultContent = 'conf t';
+            if (type === 'exit_config') defaultContent = 'end';
+        }
+
         const newStep: Step = {
             id: Math.random().toString(36).substr(2, 9),
             type,
-            content: type === 'command' ? '' : undefined,
+            content: (type === 'command' || type === 'priv_mode' || type === 'config_mode' || type === 'exit_config') ? defaultContent : undefined,
             name: type === 'verify' ? 'Check Name' : undefined,
             command: type === 'verify' ? 'show run' : undefined,
             check_type: type === 'verify' ? 'regex_match' : undefined,
@@ -103,6 +126,7 @@ export default function TemplateBuilder() {
             await api.post('templates/', {
                 name,
                 is_baseline: isBaseline ? 1 : 0,
+                profile_id: selectedProfileId,
                 steps: steps.map(({ id, ...rest }) => rest), // Remove UI-only ID
                 config_schema,
                 body: '', // Empty body as we use steps now
@@ -132,15 +156,31 @@ export default function TemplateBuilder() {
                             onChange={(e) => setName(e.target.value)}
                             className="bg-transparent text-xl font-bold text-white focus:outline-none border-b border-transparent focus:border-blue-500 transition-colors"
                         />
-                        <div className="flex items-center gap-2 mt-1">
-                            <input
-                                type="checkbox"
-                                id="isBaseline"
-                                checked={isBaseline}
-                                onChange={(e) => setIsBaseline(e.target.checked)}
-                                className="rounded border-neutral-800 bg-neutral-900 text-blue-600"
-                            />
-                            <label htmlFor="isBaseline" className="text-xs text-neutral-400">Baseline Template</label>
+                        <div className="flex items-center gap-4 mt-1">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="isBaseline"
+                                    checked={isBaseline}
+                                    onChange={(e) => setIsBaseline(e.target.checked)}
+                                    className="rounded border-neutral-800 bg-neutral-900 text-blue-600"
+                                />
+                                <label htmlFor="isBaseline" className="text-xs text-neutral-400">Baseline Template</label>
+                            </div>
+                            <div className="bg-neutral-800 h-3 w-px mx-1"></div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] uppercase font-bold text-neutral-500">Device Profile:</span>
+                                <select
+                                    value={selectedProfileId || ''}
+                                    onChange={(e) => setSelectedProfileId(e.target.value ? Number(e.target.value) : null)}
+                                    className="bg-transparent text-xs text-neutral-300 focus:outline-none border-none cursor-pointer hover:text-white"
+                                >
+                                    <option value="">None (Generic)</option>
+                                    {profiles.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -277,9 +317,18 @@ export default function TemplateBuilder() {
                                     )}
 
                                     {(step.type === 'priv_mode' || step.type === 'config_mode' || step.type === 'exit_config') && (
-                                        <div className="bg-neutral-950/50 border border-neutral-800/50 rounded-lg p-3 text-xs text-neutral-500 flex items-center gap-2">
-                                            <ChevronRight className="h-3 w-3" />
-                                            This step will use the device profile's predefined commands to change modes.
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">Command</label>
+                                            <input
+                                                type="text"
+                                                value={step.content}
+                                                onChange={(e) => updateStep(step.id, { content: e.target.value })}
+                                                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm font-mono text-blue-400 focus:outline-none focus:border-blue-500"
+                                            />
+                                            <div className="bg-neutral-950/50 border border-neutral-800/50 rounded-lg p-2 text-[10px] text-neutral-500 flex items-center gap-2">
+                                                <ChevronRight className="h-3 w-3" />
+                                                This step uses the specified command to transition device state.
+                                            </div>
                                         </div>
                                     )}
                                 </div>

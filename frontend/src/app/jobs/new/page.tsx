@@ -162,17 +162,16 @@ export default function NewJobPage() {
 
                                 {p.enabled && (
                                     <div className="space-y-2">
-                                        {/* Render inputs based on schema fields */}
-                                        {/* Assuming schema.fields is array of {name, label, type} */}
-                                        {selectedTemplate.config_schema.fields?.map((field: any) => (
-                                            <div key={field.name}>
-                                                <label className="block text-[10px] uppercase tracking-wider text-neutral-500">{field.name}</label>
+                                        {/* Render inputs based on JSON Schema properties */}
+                                        {Object.entries(selectedTemplate.config_schema.properties || {}).map(([key, prop]: [string, any]) => (
+                                            <div key={key}>
+                                                <label className="block text-[10px] uppercase tracking-wider text-neutral-500">{prop.title || key}</label>
                                                 <input
                                                     type="text"
                                                     className="w-full rounded bg-neutral-950 border border-neutral-700 px-2 py-1 text-xs text-white"
-                                                    placeholder={field.name}
-                                                    value={p.variables[field.name] || ""}
-                                                    onChange={(e) => updatePortVariable(idx, field.name, e.target.value)}
+                                                    placeholder={prop.title || key}
+                                                    value={p.variables[key] || ""}
+                                                    onChange={(e) => updatePortVariable(idx, key, e.target.value)}
                                                 />
                                             </div>
                                         ))}

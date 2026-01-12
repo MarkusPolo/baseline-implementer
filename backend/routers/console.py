@@ -49,41 +49,53 @@ async def console_websocket(websocket: WebSocket, port_id: str):
 
         # Bridge tasks
         async def serial_to_ws():
+            print("debug: starting serial_to_ws")
             try:
                 while True:
                     # session.read_available is non-blocking-ish (blocks for timeout)
                     # We use a small timeout in SerialSession to keep this loop responsive
                     data = session.read_available()
                     if data:
+                        # print(f"debug: serial -> ws: {repr(data)}")
                         await websocket.send_text(data)
                     await asyncio.sleep(0.01)
-            except Exception:
+            except Exception as e:
+                print(f"debug: serial_to_ws exception: {e}")
                 pass
+            print("debug: serial_to_ws ended")
 
         async def ws_to_serial():
+            print("debug: starting ws_to_serial")
             try:
                 while True:
                     # Receive raw bytes/text from xterm.js
                     data = await websocket.receive_text()
                     if data:
+                        print(f"debug: ws -> serial: {repr(data)}")
                         # For now, just pass through everything
                         session.send(data)
             except WebSocketDisconnect:
+                print("debug: ws_to_serial disconnect")
                 raise
-            except Exception:
+            except Exception as e:
+                print(f"debug: ws_to_serial exception: {e}")
                 pass
-
+            print("debug: ws_to_serial ended")
+        
         # Run both concurrently
+        print(f"debug: starting bridge for {port_path}")
         await asyncio.gather(serial_to_ws(), ws_to_serial())
-
     except WebSocketDisconnect:
+        print(f"debug: main websocket disconnect")
         pass
     except Exception as e:
+        print(f"debug: main exception: {e}")
         try:
             await websocket.send_text(f"\r\n[Console Error: {str(e)}]\r\n")
         except:
             pass
     finally:
+        print(f"debug: cleaning up {port_path}")
         if session:
             session.disconnect()
         if port_path in active_consoles:

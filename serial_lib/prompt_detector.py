@@ -16,12 +16,12 @@ class PromptDetector:
     
     # Default Cisco IOS patterns (fallback)
     DEFAULT_PATTERNS = {
-        "user": r"(?m)^.*?>\s*$",
-        "priv": r"(?m)^.*?#\s*$",
-        "config": r"(?m)^.*?\(config[^\)]*\)#\s*$",
-        "any": r"(?m)^.*?[>#]\s*$",
-        "password": r"(?m)^[Pp]assword:\s*$",
-        "pagination": r"(?im)(?:\s*--\s*more\s*--|^\s*more\s*:|(?i)press\s+any\s+key|(?i)press\s+enter|(?i)hit\s+any\s+key|(?i)q\s*=\s*quit|(?i)space\s*bar\s*to\s+continue|(?i)next\s+page|\[\s*more\s*\])"
+        "user": r"(?m).*?>\s*\Z",
+        "priv": r"(?m).*?#\s*\Z",
+        "config": r"(?m).*?\(config[^\)]*\)#\s*\Z",
+        "any": r"(?m).*?[>#]\s*\Z",
+        "password": r"(?m)^[Pp]assword:\s*\Z",
+        "pagination": r"(?is)\s*--\s*more\s*--\s*\Z|(?im)^\s*more\s*:\s*\Z|(?im)press\s+any\s+key|(?im)press\s+enter|(?im)hit\s+any\s+key|(?im)q\s*=\s*quit|(?im)space\s*bar\s*to\s+continue|(?im)next\s+page|\[\s*more\s*\]"
     }
     
     def __init__(self, patterns: Optional[Dict[str, str]] = None):

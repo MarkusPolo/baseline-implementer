@@ -288,6 +288,10 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             session.drain(0.5)
             runner = CommandRunner(session, prompt_patterns)
             
+            # Disable paging for predictable output
+            runner.disable_paging()
+            log("Attempted to disable pagination for the session.")
+            
             # 3. Execute Steps (New Logic) or Template Body (Old Logic)
             if target.job.template.steps:
                 # Separate execution steps from verification checks

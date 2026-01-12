@@ -58,9 +58,10 @@ class CommandRunner:
         # Unknown prompt style
         raise RuntimeError(f"Could not determine prompt state. Buffer tail:\n{buf[-400:]}")
 
-    def run_show(self, cmd: str, timeout: float = 30.0) -> str:
+    def run_show(self, cmd: str, timeout: float = 60.0) -> str:
         """
         Execute a show command and handle pagination prompts automatically.
+        Prioritizes pager detection over final prompt detection.
         """
         self.session.send_line(cmd)
         
@@ -68,7 +69,6 @@ class CommandRunner:
         end_time = time.monotonic() + timeout
         
         while time.monotonic() < end_time:
-            # Read available data
             chunk = self.session.read_available()
             if not chunk:
                 time.sleep(0.1)
@@ -77,15 +77,26 @@ class CommandRunner:
             full_output += chunk
             normalized = self.detector.normalize(full_output)
             
-            # Check for final prompt (privileged mode)
-            if self.detector.PROMPT_PRIV.search(normalized):
-                return normalized
-            
-            # Check for pagination prompt
-            if self.detector.PROMPT_PAGINATION.search(normalized):
-                # Send space raw (no newline) to get next page
+            # 1. Check for pagination prompt at the VERY END of normalized output
+            # We use a small tail for efficiency but enough to catch the prompt
+            tail = normalized[-128:]
+            if self.detector.PROMPT_PAGINATION.search(tail):
+                # Send space raw to get next page
                 self.session.send(" ")
-                time.sleep(0.1)
+                # Remove the pager prompt from accumulated output to keep it clean
+                # We do this by finding the match in the full_output and slicing it
+                # or just letting normalization handle most of it if we are careful.
+                # Actually, the user suggested deleting it from the buffer.
+                match = self.detector.PROMPT_PAGINATION.search(full_output)
+                if match:
+                    full_output = full_output[:match.start()]
+                
+                time.sleep(0.2)
+                continue # Re-check after sending space
+            
+            # 2. Check for final prompt only if no pager was detected
+            if self.detector.PROMPT_PRIV.search(tail):
+                return self.detector.normalize(full_output)
                 
         raise TimeoutError(f"Timed out waiting for final prompt after '{cmd}'.\nLast output seen:\n{full_output[-500:]}")
 
@@ -101,14 +112,12 @@ class CommandRunner:
         self.session.wait_for(self.detector.PROMPT_PRIV, timeout=10.0)
     
     def disable_paging(self):
+        """Best-effort attempt to disable pagination."""
         self.session.send_line("terminal length 0")
-        # In config mode it returns to config prompt, in priv mode to priv prompt.
-        # We generally expect this to be run in priv mode or config mode.
-        # For safety let's assume usage in config mode or check prompt.
-        # But commonly "terminal length 0" is a priv exec command on many platforms,
-        # though often works in config mode too or is implicit.
-        # Let's match PROMPT_ANY to be safe or just drain.
-        self.session.drain(0.5)
+        try:
+            self.wait_for_prompt(timeout=5.0)
+        except:
+             self.session.drain(0.5)
 
     # Common CLI errors
     ERROR_PATTERNS = [
@@ -118,10 +127,32 @@ class CommandRunner:
         re.compile(r"Error:", re.I)
     ]
 
-    def wait_for_prompt(self, timeout: float = 10.0) -> str:
+    def wait_for_prompt(self, timeout: float = 15.0) -> str:
         """Wait for any valid prompt to appear and return the normalized buffer."""
-        buf = self.session.wait_for(self.detector.PROMPT_ANY, timeout=timeout)
-        return self.detector.normalize(buf)
+        full_output = ""
+        end_time = time.monotonic() + timeout
+        
+        while time.monotonic() < end_time:
+            chunk = self.session.read_available()
+            if not chunk:
+                time.sleep(0.1)
+                continue
+            
+            full_output += chunk
+            normalized = self.detector.normalize(full_output)
+            tail = normalized[-128:]
+            
+            # 1. Prioritize Pager
+            if self.detector.PROMPT_PAGINATION.search(tail):
+                self.session.send(" ")
+                time.sleep(0.2)
+                continue
+                
+            # 2. Then check for final prompt
+            if self.detector.PROMPT_ANY.search(tail):
+                return normalized
+                
+        raise TimeoutError(f"Timed out waiting for prompt. Last output seen:\n{full_output[-500:]}")
 
     def check_for_errors(self, buffer: str) -> Optional[str]:
         """Look for common error patterns in the output buffer."""

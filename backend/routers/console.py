@@ -3,6 +3,8 @@ import asyncio
 import os
 import serial
 from serial_lib.serial_session import SerialSession
+from serial_lib.command_runner import CommandRunner
+import json
 
 router = APIRouter(
     prefix="/console",
@@ -76,8 +78,14 @@ async def list_ports():
     return ports
 
 # In-memory lock for active console sessions in this process
-# Note: For multi-process/worker setups, a file-based or Redis-based lock should be used.
 active_consoles = set()
+# Shared locks for serial port access to prevent race conditions during capture
+port_locks = {}
+
+def get_port_lock(port_path):
+    if port_path not in port_locks:
+        port_locks[port_path] = asyncio.Lock()
+    return port_locks[port_path]
 
 @router.websocket("/ws/{port_id}")
 async def console_websocket(websocket: WebSocket, port_id: str):
@@ -118,8 +126,8 @@ async def console_websocket(websocket: WebSocket, port_id: str):
             try:
                 while True:
                     # Run read in thread to avoid blocking (read_available reads 4096 bytes)
-                    # session.read_available is fast but could block slightly on I/O
-                    data = await asyncio.to_thread(session.read_available)
+                    async with get_port_lock(port_path):
+                        data = await asyncio.to_thread(session.read_available)
                     if data:
                         await websocket.send_text(data)
                     await asyncio.sleep(0.01)
@@ -129,9 +137,40 @@ async def console_websocket(websocket: WebSocket, port_id: str):
         async def ws_to_serial():
             try:
                 while True:
-                    # Receive raw bytes/text from xterm.js
+                    # Receive raw bytes/text from xterm.js or JSON command
                     data = await websocket.receive_text()
-                    if data:
+                    if not data:
+                        continue
+
+                    # Check if it's a JSON command for capture
+                    if data.startswith('{') and data.endswith('}'):
+                        try:
+                            cmd_data = json.loads(data)
+                            if cmd_data.get("action") == "capture":
+                                command = cmd_data.get("command")
+                                if command:
+                                    async with get_port_lock(port_path):
+                                        # Use CommandRunner to execute and handle pagination
+                                        runner = CommandRunner(session)
+                                        try:
+                                            # We run this in a thread because it can take a long time and involves blocking I/O
+                                            output = await asyncio.to_thread(runner.run_show, command)
+                                            await websocket.send_text(json.dumps({
+                                                "event": "capture_complete",
+                                                "command": command,
+                                                "output": output
+                                            }))
+                                        except Exception as e:
+                                            await websocket.send_text(json.dumps({
+                                                "event": "capture_failed",
+                                                "error": str(e)
+                                            }))
+                                continue
+                        except json.JSONDecodeError:
+                            pass # Not a JSON command, treat as raw input
+
+                    # Regular raw input
+                    async with get_port_lock(port_path):
                         # sending can block for 0.12s due to SerialSession.send sleep
                         await asyncio.to_thread(session.send, data)
             except WebSocketDisconnect:

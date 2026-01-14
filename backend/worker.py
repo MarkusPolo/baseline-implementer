@@ -308,7 +308,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                     step_type = step.get("type", "send")
                     log(f"Step {i+1}: {step_type}")
                     
-                    if step_type == "send":
+                    if step_type in ["send", "command"]:
                         cmd_template = step.get("cmd", step.get("content", ""))
                         rendered_cmd = env.from_string(cmd_template).render(**target.variables)
                         session.send_line(rendered_cmd)
@@ -416,7 +416,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 log("Entered config mode.")
                 
                 # Send config line by line
-                redundant_cmds = ["en", "enable", "conf t", "configure terminal"]
+                redundant_cmds = ["en", "enable", "conf", "configure", "conf t", "configure terminal"]
                 
                 for line in rendered_config.splitlines():
                     stripped = line.strip()

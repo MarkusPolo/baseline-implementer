@@ -205,7 +205,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                             </select>
                         </div>
                         <div className="text-[10px] text-neutral-500 font-mono bg-neutral-800/50 px-2 py-0.5 rounded">
-                            9600 8N1
+                            Serial
                         </div>
                     </div>
                 </div>

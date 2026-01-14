@@ -160,11 +160,33 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
                         "message": f"Pattern matched: {pattern}"
                     })
                 else:
-                    res.update({
-                        "status": "fail",
-                        "evidence": output[-500:],  # Last 500 chars as evidence
-                        "message": f"Pattern not found: {pattern}"
-                    })
+                    # Fallback: Fuzzy Whitespace Match
+                    # This handles cases like "13   MGMT" vs "13 MGMT" (table spacing)
+                    # or " description" vs "description" (indentation).
+                    try:
+                        norm_pattern = " ".join(pattern.split())
+                        norm_output = " ".join(output.split())
+                        
+                        # Use IGNORECASE for the fuzzy match to be extra forgiving and helpful
+                        if re.search(norm_pattern, norm_output, re.IGNORECASE):
+                            res.update({
+                                "status": "pass",
+                                "evidence": "(Relaxed match successful)",
+                                "message": f"Pattern matched (relaxed conformance): {pattern}"
+                            })
+                        else:
+                            res.update({
+                                "status": "fail",
+                                "evidence": output[-500:],  # Last 500 chars as evidence
+                                "message": f"Pattern not found: {pattern}"
+                            })
+                    except Exception:
+                        # If normalization inadvertently breaks a complex regex, fall back to fail
+                        res.update({
+                            "status": "fail",
+                            "evidence": output[-500:],
+                            "message": f"Pattern not found: {pattern}"
+                        })
                     
             elif check_type == "regex_not_present":
                 flags = re.MULTILINE | re.DOTALL if "\n" in pattern else re.MULTILINE

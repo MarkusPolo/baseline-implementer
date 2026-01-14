@@ -7,6 +7,7 @@
   "/jobs/new/page": "/jobs/new",
   "/jobs/page": "/jobs",
   "/macros/deploy/[id]/page": "/macros/deploy/[id]",
+  "/macros/edit/[id]/page": "/macros/edit/[id]",
   "/macros/page": "/macros",
   "/page": "/",
   "/profiles/page": "/profiles",

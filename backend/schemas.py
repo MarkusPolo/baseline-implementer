@@ -35,6 +35,15 @@ class TemplateBase(BaseModel):
 class TemplateCreate(TemplateBase):
     pass
 
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    body: Optional[str] = None
+    steps: Optional[List[Dict[str, Any]]] = None
+    config_schema: Optional[Dict[str, Any]] = None
+    verification: Optional[List[Dict[str, Any]]] = None
+    is_baseline: Optional[int] = None
+    profile_id: Optional[int] = None
+
 class Template(TemplateBase):
     id: int
     created_at: datetime.datetime
@@ -89,6 +98,12 @@ class MacroBase(BaseModel):
 
 class MacroCreate(MacroBase):
     pass
+
+class MacroUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    steps: Optional[List[Dict[str, Any]]] = None
+    config_schema: Optional[Dict[str, Any]] = None
 
 class Macro(MacroBase):
     id: int

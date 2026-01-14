@@ -1,5 +1,7 @@
 - Sometimes the job will fail, because the Switch was sleeping. I need to add 3 "returns" and some waiting time to the beginning of the template.
 - Editing a template is not possible
 - When alot of people are using the application, there will be alot of templates. I need a way to have it more organized.
-- Live Console should have a option for live key translation. User could say: Backspace is now CTRL+H by pressing the button or button combination for input. y -> z for english keyboards etc.
-- Live Console should have a Option to Copy a Output to clipboard. You should be able to input a command, the worker sends it and copys the output to your clipboard. For example: show run, worker sends commands, records output (with pagination detection and sending of space to switch), copys output to clipboard.
+- When building a macro and creating a verification there should be multi line verification for: 
+interface ...
+description ...
+

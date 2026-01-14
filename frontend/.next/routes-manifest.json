@@ -36,6 +36,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/macros/deploy/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/macros/edit/[id]",
+      "regex": "^/macros/edit/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/macros/edit/(?<nxtPid>[^/]+?)(?:/)?$"
     }
   ],
   "staticRoutes": [

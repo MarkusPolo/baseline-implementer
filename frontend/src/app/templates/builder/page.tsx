@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
     Plus,
     Trash2,
@@ -30,7 +30,15 @@ interface Step {
     pattern?: string;
 }
 
-export default function TemplateBuilder() {
+export default function TemplateBuilderPage() {
+    return (
+        <Suspense fallback={<div className="text-center py-10">Loading builder...</div>}>
+            <TemplateBuilder />
+        </Suspense>
+    );
+}
+
+function TemplateBuilder() {
     const router = useRouter();
     const [name, setName] = useState('');
     const [isBaseline, setIsBaseline] = useState(false);
@@ -40,9 +48,37 @@ export default function TemplateBuilder() {
     const [profiles, setProfiles] = useState<any[]>([]);
     const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
 
+    const searchParams = useSearchParams();
+    const editId = searchParams.get('id');
+
     useEffect(() => {
         api.get('profiles/').then(res => setProfiles(res.data));
     }, []);
+
+    // Load template for editing
+    useEffect(() => {
+        if (editId) {
+            setLoading(true);
+            api.get(`templates/${editId}`)
+                .then(res => {
+                    const data = res.data;
+                    setName(data.name);
+                    setIsBaseline(data.is_baseline === 1);
+                    setSelectedProfileId(data.profile_id);
+                    // Add frontend IDs to steps
+                    const stepsWithIds = (data.steps || []).map((s: any) => ({
+                        ...s,
+                        id: Math.random().toString(36).substr(2, 9)
+                    }));
+                    setSteps(stepsWithIds);
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("Failed to load template");
+                })
+                .finally(() => setLoading(false));
+        }
+    }, [editId]);
 
     // Detect variables whenever steps change
     useEffect(() => {
@@ -123,14 +159,21 @@ export default function TemplateBuilder() {
                 required: detectedVars
             };
 
-            await api.post('templates/', {
+            const payload = {
                 name,
                 is_baseline: isBaseline ? 1 : 0,
                 profile_id: selectedProfileId,
                 steps: steps.map(({ id, ...rest }) => rest), // Remove UI-only ID
                 config_schema,
                 body: '', // Empty body as we use steps now
-            });
+            };
+
+            if (editId) {
+                await api.put(`templates/${editId}`, payload);
+            } else {
+                await api.post('templates/', payload);
+            }
+
             router.push('/templates');
         } catch (err) {
             console.error(err);

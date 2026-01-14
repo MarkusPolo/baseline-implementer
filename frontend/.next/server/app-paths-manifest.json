@@ -7,6 +7,7 @@
   "/jobs/new/page": "app/jobs/new/page.js",
   "/jobs/page": "app/jobs/page.js",
   "/macros/deploy/[id]/page": "app/macros/deploy/[id]/page.js",
+  "/macros/edit/[id]/page": "app/macros/edit/[id]/page.js",
   "/macros/page": "app/macros/page.js",
   "/page": "app/page.js",
   "/profiles/page": "app/profiles/page.js",

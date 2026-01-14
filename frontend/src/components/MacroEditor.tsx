@@ -12,17 +12,27 @@ interface MacroStep {
 }
 
 interface MacroEditorProps {
-    initialSteps: string[];
+    initialSteps: string[] | MacroStep[];
+    initialName?: string;
+    initialDescription?: string;
     onSave: (name: string, description: string, steps: MacroStep[], schema: any) => void;
     onCancel: () => void;
 }
 
-export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps) {
-    const [name, setName] = useState("");
-    const [description, setDescription] = useState("");
-    const [steps, setSteps] = useState<MacroStep[]>(
-        initialSteps.map(cmd => ({ type: "send", cmd, wait_prompt: true }))
-    );
+export function MacroEditor({ initialSteps, initialName = "", initialDescription = "", onSave, onCancel }: MacroEditorProps) {
+    const [name, setName] = useState(initialName);
+    const [description, setDescription] = useState(initialDescription);
+
+    // Normalize initialSteps to MacroStep[]
+    const normalizeSteps = (steps: string[] | MacroStep[]): MacroStep[] => {
+        if (steps.length === 0) return [];
+        if (typeof steps[0] === 'string') {
+            return (steps as string[]).map(cmd => ({ type: "send", cmd, wait_prompt: true }));
+        }
+        return steps as MacroStep[];
+    };
+
+    const [steps, setSteps] = useState<MacroStep[]>(normalizeSteps(initialSteps));
 
     // Redaction Rules 
     // ... (Keep existing rules)
@@ -303,12 +313,11 @@ export function MacroEditor({ initialSteps, onSave, onCancel }: MacroEditorProps
                                             </div>
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] uppercase font-bold text-neutral-600 tracking-widest pl-1 text-blue-500/80">Expect Regex Pattern</label>
-                                                <input
-                                                    type="text"
+                                                <textarea
                                                     value={step.pattern || ""}
                                                     onChange={(e) => updateStep(i, "pattern", e.target.value)}
-                                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500/30 font-mono"
-                                                    placeholder="Regex to match..."
+                                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500/30 font-mono min-h-[80px]"
+                                                    placeholder="Regex to match (supports multi-line)..."
                                                 />
                                             </div>
                                         </div>

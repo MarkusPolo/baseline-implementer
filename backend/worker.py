@@ -369,6 +369,10 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 
                 # Run all verification steps at the end
                 if verification_steps:
+                    # DRAIN: Wait for Syslog messages (e.g. "%SYS-5-CONFIG_I") to clear
+                    log("Draining buffer (2s) to clear Syslog messages...")
+                    session.drain(2.0)
+
                     log(f"Running {len(verification_steps)} verification steps...")
                     checks = []
                     for i, step in enumerate(verification_steps):
@@ -412,16 +416,38 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 log("Entered config mode.")
                 
                 # Send config line by line
+                redundant_cmds = ["en", "enable", "conf t", "configure terminal"]
+                
                 for line in rendered_config.splitlines():
-                    if line.strip():
-                         session.send_line(line)
-                         time.sleep(0.1) 
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                        
+                    # Filter redundant commands
+                    if stripped.lower() in redundant_cmds:
+                        log(f"Skipping redundant command: {stripped}")
+                        continue
+
+                    session.send_line(stripped)
+                    # We don't wait for a prompt here to be fast, but we should check for errors
+                    # and give a tiny bit of time for the buffer to fill if there's an error
+                    time.sleep(0.2) 
+                    
+                    # Opportunistic error check
+                    out = session.read_available()
+                    error_msg = runner.check_for_errors(out)
+                    if error_msg:
+                        log(f"WARNING: Error after '{stripped}': {error_msg}")
                 
                 log("Config sent.")
                 runner.exit_config_mode()
                 
                 # Run verification checks
                 if verification_checks:
+                    # DRAIN: Wait for Syslog messages
+                    log("Draining buffer (2s) to clear Syslog messages...")
+                    session.drain(2.0)
+                    
                     log(f"Running {len(verification_checks)} verification check(s)...")
                     check_results = run_verification_checks(runner, verification_checks, target.variables, log_func=log)
                     target.verification_results = check_results

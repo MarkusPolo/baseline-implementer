@@ -18,7 +18,7 @@ class PromptDetector:
     # Note: Global flags like (?im) are moved to re.compile to avoid 'global flags not at start' errors.
     DEFAULT_PATTERNS = {
         "user": r".*?>\s*\Z",
-        "priv": r".*?#\s*\Z",
+        "priv": r"(?:^|[\r\n]).*?#\s*\Z",
         "config": r".*?\(config[^\)]*\)#\s*\Z",
         "any": r".*?[>#]\s*\Z",
         "password": r"^[Pp]assword:\s*\Z",

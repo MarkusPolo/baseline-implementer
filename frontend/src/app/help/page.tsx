@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
     Terminal,
     FileText,
@@ -8,10 +9,15 @@ import {
     BookOpen,
     Image as ImageIcon,
     Video,
-    Workflow
+    Workflow,
+    X,
+    Maximize2
 } from 'lucide-react';
 
 export default function HelpPage() {
+    const [selectedMedia, setSelectedMedia] = useState<{ type: 'video' | 'screenshot', src: string, label: string } | null>(null);
+
+    const closeLightbox = () => setSelectedMedia(null);
     return (
         <div className="space-y-8 pb-10">
             <div>
@@ -52,7 +58,12 @@ export default function HelpPage() {
                         <li>Du kannst entweder mit Rechtsklick & Kopieren Outputs speichern oder über <strong>Command to Capture</strong> einen Befehl ausführen und das Ergebnis speichern.</li>
                     </ul>
 
-                    <MediaPlaceholder type="screenshot" label="Screenshot der Live Konsole" />
+                    <MediaItem
+                        type="screenshot"
+                        src="/screenshot_console.png"
+                        label="Screenshot der Live Konsole"
+                        onClick={() => setSelectedMedia({ type: 'screenshot', src: '/screenshot_console.png', label: 'Screenshot der Live Konsole' })}
+                    />
                 </Section>
 
                 <Section
@@ -62,12 +73,16 @@ export default function HelpPage() {
                 >
                     <ul className="list-disc list-inside space-y-2 text-sm text-neutral-400 mt-4">
                         <li><strong>Templates</strong> definieren wiederverwendbare Schritte.</li>
-                        <li>Nutze Variablen wie <code>{`{{ hostname }}`}</code> für dynamische Inhalte. (z.B. unterschiedliche IP Adresse pro Gerät)</li>
+                        <li>Nutze Variablen like <code>{`{{ hostname }}`}</code> for dynamische Inhalte. (z.B. unterschiedliche IP Adresse pro Gerät)</li>
                         <li><strong>Verifikation</strong> ermöglicht dir automatisierte Prüfung von Konfigurationen per Regex. (z.B. prüfen ob der hostname übernommen wurde mit <code> hostname {`{{ hostname }}`}</code>)</li>
                         <li>Der <strong>Template Builder</strong> ermöglicht visuelles Erstellen per Drag-and-Drop.</li>
                     </ul>
-                    {/* Placeholder for Media */}
-                    <MediaPlaceholder type="video" label="Video: Template Erstellung" />
+                    <MediaItem
+                        type="video"
+                        src="/video_template.webm"
+                        label="Video: Template Erstellung"
+                        onClick={() => setSelectedMedia({ type: 'video', src: '/video_template.webm', label: 'Video: Template Erstellung' })}
+                    />
                 </Section>
 
                 <Section
@@ -81,7 +96,12 @@ export default function HelpPage() {
                         <li>Verfolgen Sie Logs und Status im <strong>Jobs</strong> Dashboard.</li>
                         <li>Wenn das Template <strong>Verifikationsschritte</strong> definiert hat, wird dir der <strong>Beweis</strong> für die Konfiguration angezeigt. </li>
                     </ul>
-                    <MediaPlaceholder type="screenshot" label="Screenshot der Job-Übersicht" />
+                    <MediaItem
+                        type="screenshot"
+                        src="/screenshot_jobs.png"
+                        label="Screenshot der Job-Übersicht"
+                        onClick={() => setSelectedMedia({ type: 'screenshot', src: '/screenshot_jobs.png', label: 'Screenshot der Job-Übersicht' })}
+                    />
                 </Section>
 
                 <Section
@@ -115,6 +135,41 @@ export default function HelpPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Lightbox */}
+            {selectedMedia && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 transition-all animate-in fade-in duration-200"
+                    onClick={closeLightbox}
+                >
+                    <button
+                        className="absolute top-6 right-6 p-2 rounded-full bg-neutral-800 text-white hover:bg-neutral-700 transition-colors"
+                        onClick={closeLightbox}
+                    >
+                        <X className="h-6 w-6" />
+                    </button>
+                    <div
+                        className="relative max-w-5xl w-full max-h-[90vh] flex flex-col items-center"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {selectedMedia.type === 'video' ? (
+                            <video
+                                src={selectedMedia.src}
+                                controls
+                                autoPlay
+                                className="rounded-lg shadow-2xl max-h-[80vh] w-full"
+                            />
+                        ) : (
+                            <img
+                                src={selectedMedia.src}
+                                alt={selectedMedia.label}
+                                className="rounded-lg shadow-2xl max-h-[80vh] w-full object-contain"
+                            />
+                        )}
+                        <h3 className="mt-4 text-white text-lg font-medium">{selectedMedia.label}</h3>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -150,13 +205,46 @@ function WorkflowStep({ number, title, description }: { number: string, title: s
     )
 }
 
-function MediaPlaceholder({ type, label }: { type: 'video' | 'screenshot', label: string }) {
+function MediaItem({ type, src, label, onClick }: { type: 'video' | 'screenshot', src: string, label: string, onClick: () => void }) {
     return (
-        <div className="mt-4 border-2 border-dashed border-neutral-800 rounded-lg p-6 flex flex-col items-center justify-center text-neutral-600 bg-neutral-950/30 min-h-[150px]">
-            {type === 'video' ? <Video className="h-8 w-8 mb-2 opacity-50" /> : <ImageIcon className="h-8 w-8 mb-2 opacity-50" />}
-            <span className="text-xs font-mono bg-neutral-900 px-2 py-1 rounded border border-neutral-800">
-                INSERT {type.toUpperCase()}: {label}
-            </span>
+        <div
+            className="group relative mt-4 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950/50 cursor-pointer transition-all hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/10"
+            onClick={onClick}
+        >
+            <div className="aspect-video relative overflow-hidden bg-neutral-900">
+                {type === 'video' ? (
+                    <video
+                        src={src}
+                        className="h-full w-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500"
+                        muted
+                        loop
+                        onMouseOver={(e) => e.currentTarget.play()}
+                        onMouseOut={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                    />
+                ) : (
+                    <img
+                        src={src}
+                        alt={label}
+                        className="h-full w-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500"
+                    />
+                )}
+
+                {/* Overlay with Icon */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-blue-600/10 backdrop-blur-[2px]">
+                    <div className="p-3 rounded-full bg-blue-600 text-white shadow-xl shadow-blue-600/20">
+                        <Maximize2 className="h-6 w-6" />
+                    </div>
+                </div>
+
+                <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-neutral-950/80 backdrop-blur-md px-2 py-1 rounded border border-neutral-800/50">
+                    {type === 'video' ? <Video className="h-3 w-3 text-blue-400" /> : <ImageIcon className="h-3 w-3 text-blue-400" />}
+                    <span className="text-[10px] font-medium text-neutral-300 uppercase tracking-wider">{type}</span>
+                </div>
+            </div>
+            <div className="p-3 border-t border-neutral-800/50 flex justify-between items-center group-hover:bg-neutral-900/50 transition-colors">
+                <span className="text-xs font-medium text-neutral-400 group-hover:text-neutral-200">{label}</span>
+                <Maximize2 className="h-3 w-3 text-neutral-600 group-hover:text-blue-400 transition-colors" />
+            </div>
         </div>
     );
 }

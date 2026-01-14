@@ -16,7 +16,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
     const xtermRef = useRef<Terminal | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
     const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
-    const [backspaceSeq, setBackspaceSeq] = useState("\x7f");
+    const [backspaceMode, setBackspaceMode] = useState("DEL");
     const [captureCommand, setCaptureCommand] = useState("");
     const [isCapturing, setIsCapturing] = useState(false);
     const [copySuccess, setCopySuccess] = useState(false);
@@ -73,7 +73,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                         return;
                     }
                 } catch (e) {
-                    // Not JSON or parse error, treat as raw
+                    // Not control JSON or parse error, treat as raw terminal data
                 }
             }
             term.write(data);
@@ -141,12 +141,12 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
         }
     };
 
-    const handleSetBackspace = (seq: string) => {
-        setBackspaceSeq(seq);
+    const handleSetBackspace = (mode: string) => {
+        setBackspaceMode(mode);
         if (socketRef.current?.readyState === WebSocket.OPEN) {
             socketRef.current.send(JSON.stringify({
                 type: "set_backspace",
-                sequence: seq
+                mode: mode
             }));
         }
     };
@@ -165,12 +165,12 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold">Backspace:</span>
                             <select
-                                value={backspaceSeq}
+                                value={backspaceMode}
                                 onChange={(e) => handleSetBackspace(e.target.value)}
                                 className="bg-neutral-800 border border-neutral-700 text-neutral-300 text-xs rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
                             >
-                                <option value="\x7f">Default (127)</option>
-                                <option value="\x08">CTRL+H (8)</option>
+                                <option value="DEL">Default (DEL)</option>
+                                <option value="CTRLH">CTRL+H (BS)</option>
                             </select>
                         </div>
                         <div className="text-[10px] text-neutral-500 font-mono bg-neutral-800/50 px-2 py-0.5 rounded">
@@ -201,8 +201,8 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                         onClick={handleRunCapture}
                         disabled={isCapturing || !captureCommand}
                         className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${copySuccess
-                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
-                                : "bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 disabled:opacity-50 disabled:hover:bg-neutral-800"
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
+                            : "bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 disabled:opacity-50 disabled:hover:bg-neutral-800"
                             }`}
                     >
                         {copySuccess ? (

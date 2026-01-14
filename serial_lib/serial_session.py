@@ -1,6 +1,7 @@
 import time
 import serial
 import re
+import threading
 from typing import Optional
 
 class SerialSession:
@@ -10,6 +11,7 @@ class SerialSession:
         self.timeout = timeout
         self.ser: Optional[serial.Serial] = None
         self.write_delay = 0.02
+        self.lock = threading.Lock()
 
     def connect(self):
         self.ser = serial.Serial(
@@ -29,13 +31,15 @@ class SerialSession:
     def read_available(self) -> str:
         if not self.ser:
             raise RuntimeError("Serial port not open")
-        b = self.ser.read(4096)
+        with self.lock:
+            b = self.ser.read(4096)
         return b.decode(errors="replace") if b else ""
 
     def read(self, size: int = 1) -> str:
         if not self.ser:
             raise RuntimeError("Serial port not open")
-        b = self.ser.read(size)
+        with self.lock:
+            b = self.ser.read(size)
         return b.decode(errors="replace") if b else ""
 
     def drain(self, seconds: float = 0.8) -> str:
@@ -56,8 +60,9 @@ class SerialSession:
     def send(self, data: str):
         if not self.ser:
             raise RuntimeError("Serial port not open")
-        self.ser.write(data.encode())
-        self.ser.flush()
+        with self.lock:
+            self.ser.write(data.encode())
+            self.ser.flush()
         time.sleep(self.write_delay)
 
     def wait_for(self, pattern: re.Pattern, timeout: float = 10.0) -> str:

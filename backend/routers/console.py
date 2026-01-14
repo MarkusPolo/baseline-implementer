@@ -69,15 +69,17 @@ async def console_websocket(websocket: WebSocket, port_id: str):
         # Shared state for this session
         state = {
             "is_capturing": False,
-            "backspace_sequence": "\x7f" # Default
+            "backspace_mode": "DEL" # symbolic: DEL or CTRLH
         }
 
         async def serial_to_ws():
             try:
                 while True:
-                    data = await asyncio.to_thread(session.read_available)
-                    if data:
-                        await websocket.send_text(data)
+                    if not state["is_capturing"]:
+                        # read_available uses session.lock internally
+                        data = await asyncio.to_thread(session.read_available)
+                        if data:
+                            await websocket.send_text(data)
                     await asyncio.sleep(0.01)
             except Exception:
                 pass
@@ -88,11 +90,18 @@ async def console_websocket(websocket: WebSocket, port_id: str):
                 from serial_lib.command_runner import CommandRunner
                 runner = CommandRunner(session)
                 
-                # We need to send the command and wait for prompt while handling pagination
-                # CommandRunner.run_show already does exactly this!
-                output = await asyncio.to_thread(runner.run_show, command)
+                # Callback to pipe data to WebSocket while capturing
+                def on_data(chunk: str):
+                    # We can't await here directly as this runs in a thread
+                    # But we can use the loop's call_soon_threadsafe if needed, 
+                    # however for simple WebSocket send_text from a thread, 
+                    # it's better to wrap the send in a future or just use the bridge.
+                    # Wait, CommandRunner runs in a thread via asyncio.to_thread.
+                    # So this callback runs in that same thread.
+                    asyncio.run_coroutine_threadsafe(websocket.send_text(chunk), asyncio.get_event_loop())
+
+                output = await asyncio.to_thread(runner.run_show, command, on_data=on_data)
                 
-                # Send result back via control message
                 await websocket.send_text(json.dumps({
                     "type": "capture_result",
                     "command": command,
@@ -113,7 +122,6 @@ async def console_websocket(websocket: WebSocket, port_id: str):
                     if not msg:
                         continue
                     
-                    # Check if it's a control message (JSON)
                     if msg.startswith("{") and msg.endswith("}"):
                         try:
                             data = json.loads(msg)
@@ -124,15 +132,17 @@ async def console_websocket(websocket: WebSocket, port_id: str):
                                 if cmd:
                                     asyncio.create_task(run_capture(cmd))
                             elif msg_type == "set_backspace":
-                                state["backspace_sequence"] = data.get("sequence", "\x7f")
+                                state["backspace_mode"] = data.get("mode", "DEL")
                             continue
                         except json.JSONDecodeError:
-                            pass # Not JSON, treat as raw data
+                            pass
                     
-                    # Raw data (from xterm.js)
-                    # Handle Backspace Translation
-                    if msg == "\x7f": # xterm.js usually sends 127 for backspace
-                         msg = state["backspace_sequence"]
+                    # Backspace Translation Mapping
+                    if msg == "\x7f": # xterm.js default
+                        if state["backspace_mode"] == "CTRLH":
+                            msg = "\x08"
+                        else:
+                            msg = "\x7f"
                     
                     if not state["is_capturing"]:
                          await asyncio.to_thread(session.send, msg)
@@ -143,13 +153,6 @@ async def console_websocket(websocket: WebSocket, port_id: str):
         
         await asyncio.gather(serial_to_ws(), ws_to_serial())
 
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        try:
-            await websocket.send_text(f"\r\n[Console Error: {str(e)}]\r\n")
-        except:
-            pass
     finally:
         if session:
             await asyncio.to_thread(session.disconnect)

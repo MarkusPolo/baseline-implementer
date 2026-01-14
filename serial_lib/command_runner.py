@@ -2,7 +2,7 @@ import re
 import time
 from .serial_session import SerialSession
 from .prompt_detector import PromptDetector, PromptType
-from typing import Optional, Dict
+from typing import Optional, Dict, Callable
 
 class CommandRunner:
     def __init__(self, session: SerialSession, prompt_patterns: Optional[Dict[str, str]] = None):
@@ -58,7 +58,7 @@ class CommandRunner:
         # Unknown prompt style
         raise RuntimeError(f"Could not determine prompt state. Buffer tail:\n{buf[-400:]}")
 
-    def run_show(self, cmd: str, timeout: float = 60.0) -> str:
+    def run_show(self, cmd: str, timeout: float = 60.0, on_data: Optional[Callable[[str], None]] = None) -> str:
         """
         Execute a show command and handle pagination prompts automatically.
         Prioritizes pager detection over final prompt detection.
@@ -74,6 +74,9 @@ class CommandRunner:
                 time.sleep(0.1)
                 continue
             
+            if on_data:
+                on_data(chunk)
+
             full_output += chunk
             normalized = self.detector.normalize(full_output)
             
@@ -127,7 +130,7 @@ class CommandRunner:
         re.compile(r"Error:", re.I)
     ]
 
-    def wait_for_prompt(self, timeout: float = 15.0) -> str:
+    def wait_for_prompt(self, timeout: float = 15.0, on_data: Optional[Callable[[str], None]] = None) -> str:
         """Wait for any valid prompt to appear and return the normalized buffer."""
         full_output = ""
         end_time = time.monotonic() + timeout
@@ -138,6 +141,9 @@ class CommandRunner:
                 time.sleep(0.1)
                 continue
             
+            if on_data:
+                on_data(chunk)
+
             full_output += chunk
             normalized = self.detector.normalize(full_output)
             tail = normalized[-128:]

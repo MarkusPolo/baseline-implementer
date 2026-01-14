@@ -20,6 +20,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
     const [captureCommand, setCaptureCommand] = useState("");
     const [isCapturing, setIsCapturing] = useState(false);
     const [copySuccess, setCopySuccess] = useState(false);
+    const [lastResult, setLastResult] = useState<{ command: string; output: string } | null>(null);
 
     const onCommandRef = useRef(onCommand);
 
@@ -66,10 +67,18 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                     const text = await data.text();
                     const parsed = JSON.parse(text);
                     if (parsed.type === "capture_result") {
-                        navigator.clipboard.writeText(parsed.output);
-                        setCopySuccess(true);
                         setIsCapturing(false);
-                        setTimeout(() => setCopySuccess(false), 3000);
+                        setLastResult({ command: parsed.command, output: parsed.output });
+
+                        // Try to copy, but don't block on it
+                        try {
+                            navigator.clipboard.writeText(parsed.output).then(() => {
+                                setCopySuccess(true);
+                                setTimeout(() => setCopySuccess(false), 3000);
+                            });
+                        } catch (err) {
+                            console.error("Clipboard copy failed:", err);
+                        }
                         return;
                     } else if (parsed.type === "error") {
                         term.write(`\r\n\x1b[31m[Error: ${parsed.message}]\x1b[0m\r\n`);
@@ -141,11 +150,26 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
     const handleRunCapture = () => {
         if (socketRef.current?.readyState === WebSocket.OPEN && captureCommand) {
             setIsCapturing(true);
+            setLastResult(null); // Clear previous result
             socketRef.current.send(JSON.stringify({
                 type: "capture",
                 command: captureCommand
             }));
         }
+    };
+
+    const handleDownloadResult = () => {
+        if (!lastResult) return;
+        const blob = new Blob([lastResult.output], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        a.href = url;
+        a.download = `capture_${lastResult.command.replace(/\s+/g, "_")}_${timestamp}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     const handleSetBackspace = (mode: string) => {
@@ -224,6 +248,19 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                             </>
                         )}
                     </button>
+
+                    {lastResult && (
+                        <button
+                            onClick={handleDownloadResult}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all flex items-center gap-2 whitespace-nowrap"
+                            title="Download last capture as .txt"
+                        >
+                            <svg className="w-3.5 h-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Download
+                        </button>
+                    )}
                 </div>
             </div>
             <div ref={terminalRef} className="flex-1 min-h-[450px]" />

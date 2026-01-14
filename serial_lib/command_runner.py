@@ -81,9 +81,8 @@ class CommandRunner:
             normalized = self.detector.normalize(full_output)
             
             # 1. Check for pagination prompt at the VERY END of normalized output
-            # We use a small tail for efficiency but enough to catch the prompt
-            # 1. Check for pagination prompt at the VERY END of normalized output
-            tail = normalized[-64:]
+            # Use a slightly larger tail for better reliability
+            tail = normalized[-256:]
             if self.detector.PROMPT_PAGINATION.search(tail):
                 self.session.send(" ")
                 
@@ -148,7 +147,7 @@ class CommandRunner:
 
             full_output += chunk
             normalized = self.detector.normalize(full_output)
-            tail = normalized[-128:]
+            tail = normalized[-256:]
             
             # 1. Prioritize Pager
             if self.detector.PROMPT_PAGINATION.search(tail):

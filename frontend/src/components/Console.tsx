@@ -50,6 +50,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         const wsUrl = `${protocol}//${window.location.host}/api/console/ws/${portId}`;
         const socket = new WebSocket(wsUrl);
+        socket.binaryType = "blob";
         socketRef.current = socket;
 
         socket.onopen = () => {

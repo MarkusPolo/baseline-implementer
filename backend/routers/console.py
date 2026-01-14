@@ -91,6 +91,10 @@ async def console_websocket(websocket: WebSocket, port_id: str):
                 from serial_lib.command_runner import CommandRunner
                 runner = CommandRunner(session)
                 
+                # Preliminary robustness: clear noise and disable paging
+                await asyncio.to_thread(session.drain, 0.5)
+                await asyncio.to_thread(runner.disable_paging)
+                
                 # Callback to pipe data to WebSocket while capturing
                 def on_data(chunk: str):
                     # Use the captured main loop to safely send data from the worker thread

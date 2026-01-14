@@ -112,3 +112,17 @@ class Macro(MacroBase):
     class Config:
         from_attributes = True
 
+# Setting Schemas
+class SettingBase(BaseModel):
+    key: str
+    value: Any
+
+class SettingCreate(SettingBase):
+    pass
+
+class Setting(SettingBase):
+    id: int
+    updated_at: datetime.datetime
+
+    class Config:
+        from_attributes = True

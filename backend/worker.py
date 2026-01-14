@@ -331,7 +331,17 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             prompt_patterns = profile.prompt_patterns
             log(f"Using device profile: {profile.name} ({profile.vendor})")
         
-        with SerialSession(port_path) as session:
+        # Fetch baud rate from settings
+        baud = 9600
+        setting = db.query(models.Setting).filter(models.Setting.key == "port_baud_rates").first()
+        if setting:
+            # target.port might be "~/port1", so we extract the port ID
+            match = re.search(r"port(\d+)", target.port)
+            if match:
+                port_id = match.group(1)
+                baud = setting.value.get(port_id, 9600)
+
+        with SerialSession(port_path, baud=baud) as session:
             # Clear noise and wake up
             session.drain(0.5)
             runner = CommandRunner(session, prompt_patterns)

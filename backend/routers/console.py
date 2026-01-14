@@ -4,6 +4,11 @@ import os
 import serial
 from serial_lib.serial_session import SerialSession
 
+from ..database import SessionLocal, get_db
+from .. import models, schemas
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
 router = APIRouter(
     prefix="/console",
     tags=["console"]
@@ -14,19 +19,30 @@ def test_console():
     return {"status": "console router reachable"}
 
 @router.get("/ports")
-def list_ports():
+def list_ports(db: Session = Depends(get_db)):
     ports = []
+    
+    # Fetch baud rates from settings
+    baud_rates = {}
+    setting = db.query(models.Setting).filter(models.Setting.key == "port_baud_rates").first()
+    if setting:
+        baud_rates = setting.value
+        
     # Check ports 1-16
     for i in range(1, 17):
         port_path = os.path.expanduser(f"~/port{i}")
         exists = os.path.exists(port_path)
         is_busy = port_path in active_consoles
         
+        # Determine baud rate (default 9600)
+        baud = baud_rates.get(str(i), 9600)
+        
         ports.append({
             "id": i,
             "path": port_path,
             "connected": exists, # "connected" means the device/symlink exists
-            "busy": is_busy
+            "busy": is_busy,
+            "baud": baud
         })
     return ports
 
@@ -56,7 +72,14 @@ async def console_websocket(websocket: WebSocket, port_id: str):
             await websocket.close()
             return
 
-        session = SerialSession(port_path, baud=9600, timeout=0.1)
+        # Fetch baud rate for this port from settings
+        baud = 9600
+        with SessionLocal() as db:
+            setting = db.query(models.Setting).filter(models.Setting.key == "port_baud_rates").first()
+            if setting and str(port_id) in setting.value:
+                baud = setting.value[str(port_id)]
+
+        session = SerialSession(port_path, baud=baud, timeout=0.1)
         try:
             await asyncio.to_thread(session.connect)
         except serial.SerialException as e:

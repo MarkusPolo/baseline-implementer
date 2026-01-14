@@ -85,6 +85,7 @@ async def console_websocket(websocket: WebSocket, port_id: str):
                 pass
 
         async def run_capture(command: str):
+            loop = asyncio.get_running_loop()
             state["is_capturing"] = True
             try:
                 from serial_lib.command_runner import CommandRunner
@@ -92,13 +93,8 @@ async def console_websocket(websocket: WebSocket, port_id: str):
                 
                 # Callback to pipe data to WebSocket while capturing
                 def on_data(chunk: str):
-                    # We can't await here directly as this runs in a thread
-                    # But we can use the loop's call_soon_threadsafe if needed, 
-                    # however for simple WebSocket send_text from a thread, 
-                    # it's better to wrap the send in a future or just use the bridge.
-                    # Wait, CommandRunner runs in a thread via asyncio.to_thread.
-                    # So this callback runs in that same thread.
-                    asyncio.run_coroutine_threadsafe(websocket.send_text(chunk), asyncio.get_event_loop())
+                    # Use the captured main loop to safely send data from the worker thread
+                    asyncio.run_coroutine_threadsafe(websocket.send_text(chunk), loop)
 
                 output = await asyncio.to_thread(runner.run_show, command, on_data=on_data)
                 

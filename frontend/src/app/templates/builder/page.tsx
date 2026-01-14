@@ -41,19 +41,12 @@ export default function TemplateBuilderPage() {
 function TemplateBuilder() {
     const router = useRouter();
     const [name, setName] = useState('');
-    const [isBaseline, setIsBaseline] = useState(false);
     const [steps, setSteps] = useState<Step[]>([]);
     const [loading, setLoading] = useState(false);
     const [detectedVars, setDetectedVars] = useState<string[]>([]);
-    const [profiles, setProfiles] = useState<any[]>([]);
-    const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
 
     const searchParams = useSearchParams();
     const editId = searchParams.get('id');
-
-    useEffect(() => {
-        api.get('profiles/').then(res => setProfiles(res.data));
-    }, []);
 
     // Load template for editing
     useEffect(() => {
@@ -63,8 +56,6 @@ function TemplateBuilder() {
                 .then(res => {
                     const data = res.data;
                     setName(data.name);
-                    setIsBaseline(data.is_baseline === 1);
-                    setSelectedProfileId(data.profile_id);
                     // Add frontend IDs to steps and normalize data
                     const stepsWithIds = (data.steps || []).map((s: any) => {
                         let type = s.type;
@@ -126,20 +117,10 @@ function TemplateBuilder() {
     const addStep = (type: StepType) => {
         let defaultContent = '';
 
-        // Attempt to get default command from profile
-        if (selectedProfileId) {
-            const profile = profiles.find(p => p.id === selectedProfileId);
-            if (profile?.commands) {
-                if (type === 'priv_mode') defaultContent = profile.commands.enable || 'en';
-                if (type === 'config_mode') defaultContent = profile.commands.enter_config || 'conf t';
-                if (type === 'exit_config') defaultContent = profile.commands.exit_config || 'end';
-            }
-        } else {
-            // Fallback defaults
-            if (type === 'priv_mode') defaultContent = 'en';
-            if (type === 'config_mode') defaultContent = 'conf t';
-            if (type === 'exit_config') defaultContent = 'end';
-        }
+        // Fallback defaults
+        if (type === 'priv_mode') defaultContent = 'en';
+        if (type === 'config_mode') defaultContent = 'conf t';
+        if (type === 'exit_config') defaultContent = 'end';
 
         const newStep: Step = {
             id: Math.random().toString(36).substr(2, 9),
@@ -188,8 +169,8 @@ function TemplateBuilder() {
 
             const payload = {
                 name,
-                is_baseline: isBaseline ? 1 : 0,
-                profile_id: selectedProfileId,
+                is_baseline: 0,
+                profile_id: null,
                 steps: steps.map(({ id, ...rest }) => rest), // Remove UI-only ID
                 config_schema,
                 body: '', // Empty body as we use steps now
@@ -226,32 +207,6 @@ function TemplateBuilder() {
                             onChange={(e) => setName(e.target.value)}
                             className="bg-transparent text-xl font-bold text-white focus:outline-none border-b border-transparent focus:border-blue-500 transition-colors"
                         />
-                        <div className="flex items-center gap-4 mt-1">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    id="isBaseline"
-                                    checked={isBaseline}
-                                    onChange={(e) => setIsBaseline(e.target.checked)}
-                                    className="rounded border-neutral-800 bg-neutral-900 text-blue-600"
-                                />
-                                <label htmlFor="isBaseline" className="text-xs text-neutral-400">Baseline Template</label>
-                            </div>
-                            <div className="bg-neutral-800 h-3 w-px mx-1"></div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] uppercase font-bold text-neutral-500">Device Profile:</span>
-                                <select
-                                    value={selectedProfileId || ''}
-                                    onChange={(e) => setSelectedProfileId(e.target.value ? Number(e.target.value) : null)}
-                                    className="bg-transparent text-xs text-neutral-300 focus:outline-none border-none cursor-pointer hover:text-white"
-                                >
-                                    <option value="">None (Generic)</option>
-                                    {profiles.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <button

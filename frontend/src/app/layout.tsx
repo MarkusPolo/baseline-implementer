@@ -32,6 +32,8 @@ export default function RootLayout({
               <NavLink href="/jobs">Jobs</NavLink>
               <div className="my-2 border-t border-neutral-800" />
               <NavLink href="/settings">Settings</NavLink>
+              <div className="my-2 border-t border-neutral-800" />
+              <NavLink href="/help">Help</NavLink>
             </nav>
 
             <div className="mt-auto rounded-lg bg-neutral-800/50 p-3 text-xs text-neutral-500 border border-neutral-800">

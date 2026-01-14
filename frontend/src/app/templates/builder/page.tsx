@@ -65,11 +65,38 @@ function TemplateBuilder() {
                     setName(data.name);
                     setIsBaseline(data.is_baseline === 1);
                     setSelectedProfileId(data.profile_id);
-                    // Add frontend IDs to steps
-                    const stepsWithIds = (data.steps || []).map((s: any) => ({
-                        ...s,
-                        id: Math.random().toString(36).substr(2, 9)
-                    }));
+                    // Add frontend IDs to steps and normalize data
+                    const stepsWithIds = (data.steps || []).map((s: any) => {
+                        let type = s.type;
+                        let content = s.content;
+                        let command = s.command;
+                        let check_type = s.check_type;
+
+                        // Normalize 'send' (from macros) to 'command'
+                        if (type === 'send') {
+                            type = 'command';
+                            content = s.cmd;
+                        }
+
+                        // Normalize 'verify' (from macros) fields
+                        if (type === 'verify') {
+                            if (s.cmd && !command) {
+                                command = s.cmd;
+                            }
+                            if (!check_type) {
+                                check_type = 'regex_match';
+                            }
+                        }
+
+                        return {
+                            ...s,
+                            id: Math.random().toString(36).substr(2, 9),
+                            type,
+                            content,
+                            command,
+                            check_type
+                        };
+                    });
                     setSteps(stepsWithIds);
                 })
                 .catch(err => {

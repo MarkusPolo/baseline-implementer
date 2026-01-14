@@ -98,16 +98,17 @@ async def console_websocket(websocket: WebSocket, port_id: str):
 
                 output = await asyncio.to_thread(runner.run_show, command, on_data=on_data)
                 
-                await websocket.send_text(json.dumps({
+                # Send control messages as Binary Frames (bytes)
+                await websocket.send_bytes(json.dumps({
                     "type": "capture_result",
                     "command": command,
                     "output": output
-                }))
+                }).encode())
             except Exception as e:
-                await websocket.send_text(json.dumps({
+                await websocket.send_bytes(json.dumps({
                     "type": "error",
                     "message": f"Capture failed: {str(e)}"
-                }))
+                }).encode())
             finally:
                 state["is_capturing"] = False
 

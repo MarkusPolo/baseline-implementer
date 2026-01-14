@@ -82,20 +82,22 @@ class CommandRunner:
             
             # 1. Check for pagination prompt at the VERY END of normalized output
             # We use a small tail for efficiency but enough to catch the prompt
-            tail = normalized[-128:]
+            # 1. Check for pagination prompt at the VERY END of normalized output
+            tail = normalized[-64:]
             if self.detector.PROMPT_PAGINATION.search(tail):
-                # Send space raw to get next page
                 self.session.send(" ")
-                # Remove the pager prompt from accumulated output to keep it clean
-                # We do this by finding the match in the full_output and slicing it
-                # or just letting normalization handle most of it if we are careful.
-                # Actually, the user suggested deleting it from the buffer.
-                match = self.detector.PROMPT_PAGINATION.search(full_output)
-                if match:
-                    full_output = full_output[:match.start()]
+                
+                # Remove ONLY the last instance of the pager prompt from the raw buffer
+                # Based on the normalized tail match
+                matches = list(self.detector.PROMPT_PAGINATION.finditer(full_output))
+                if matches:
+                    last_match = matches[-1]
+                    # Only truncate if it's near the end to avoid accidental deletions
+                    if last_match.start() > len(full_output) - 128:
+                        full_output = full_output[:last_match.start()]
                 
                 time.sleep(0.2)
-                continue # Re-check after sending space
+                continue 
             
             # 2. Check for final prompt only if no pager was detected
             if self.detector.PROMPT_PRIV.search(tail):

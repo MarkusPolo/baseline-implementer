@@ -56,11 +56,14 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             setStatus("connected");
         };
 
-        socket.onmessage = (event) => {
+        socket.onmessage = async (event) => {
             const data = event.data;
-            if (typeof data === "string" && data.startsWith("{") && data.endsWith("}")) {
+
+            // Binary frames are control messages (JSON)
+            if (data instanceof Blob) {
                 try {
-                    const parsed = JSON.parse(data);
+                    const text = await data.text();
+                    const parsed = JSON.parse(text);
                     if (parsed.type === "capture_result") {
                         navigator.clipboard.writeText(parsed.output);
                         setCopySuccess(true);
@@ -73,9 +76,12 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                         return;
                     }
                 } catch (e) {
-                    // Not control JSON or parse error, treat as raw terminal data
+                    console.error("Failed to parse binary control message:", e);
                 }
+                return;
             }
+
+            // Text frames are raw terminal data
             term.write(data);
         };
 

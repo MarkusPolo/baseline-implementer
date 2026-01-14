@@ -15,13 +15,14 @@ class PromptDetector:
     """
     
     # Default Cisco IOS patterns (fallback)
+    # Note: Global flags like (?im) are moved to re.compile to avoid 'global flags not at start' errors.
     DEFAULT_PATTERNS = {
-        "user": r"(?m).*?>\s*\Z",
-        "priv": r"(?m).*?#\s*\Z",
-        "config": r"(?m).*?\(config[^\)]*\)#\s*\Z",
-        "any": r"(?m).*?[>#]\s*\Z",
-        "password": r"(?m)^[Pp]assword:\s*\Z",
-        "pagination": r"(?is)\s*--\s*more\s*--\s*\Z|(?im)^\s*more\s*:\s*\Z|(?im)press\s+any\s+key|(?im)press\s+enter|(?im)hit\s+any\s+key|(?im)q\s*=\s*quit|(?im)space\s*bar\s*to\s+continue|(?im)next\s+page|\[\s*more\s*\]"
+        "user": r".*?>\s*\Z",
+        "priv": r".*?#\s*\Z",
+        "config": r".*?\(config[^\)]*\)#\s*\Z",
+        "any": r".*?[>#]\s*\Z",
+        "password": r"^[Pp]assword:\s*\Z",
+        "pagination": r"\s*--\s*more\s*--|^\s*more\s*:|press\s+any\s+key|press\s+enter|hit\s+any\s+key|q\s*=\s*quit|space\s*bar\s*to\s+continue|next\s+page|\[\s*more\s*\]"
     }
     
     def __init__(self, patterns: Optional[Dict[str, str]] = None):
@@ -35,16 +36,18 @@ class PromptDetector:
         if patterns:
             p.update(patterns)
         
-        flags = re.MULTILINE
-        self.PROMPT_USER = re.compile(p["user"], flags)
-        self.PROMPT_PRIV = re.compile(p["priv"], flags)
-        self.PROMPT_CONF = re.compile(p["config"], flags)
-        self.PROMPT_ANY = re.compile(p["any"], flags)
-        self.PROMPT_PWD = re.compile(p["password"], flags)
-        self.PROMPT_PAGINATION = re.compile(p["pagination"], flags)
+        # Standard flags: MULTILINE is common for prompts, IGNORECASE for pagination.
+        self.PROMPT_USER = re.compile(p["user"], re.MULTILINE)
+        self.PROMPT_PRIV = re.compile(p["priv"], re.MULTILINE)
+        self.PROMPT_CONF = re.compile(p["config"], re.MULTILINE)
+        self.PROMPT_ANY = re.compile(p["any"], re.MULTILINE)
+        self.PROMPT_PWD = re.compile(p["password"], re.MULTILINE)
+        
+        # Pagination needs Case-Insensitivity and Multi-line
+        self.PROMPT_PAGINATION = re.compile(p["pagination"], re.IGNORECASE | re.MULTILINE)
         
         # Combined pattern for privilege escalation
-        self.PROMPT_PRIV_OR_PWD = re.compile(f"({p['priv']})|({p['password']})", flags)
+        self.PROMPT_PRIV_OR_PWD = re.compile(f"({p['priv']})|({p['password']})", re.MULTILINE)
     
     @staticmethod
     def normalize(text: str) -> str:

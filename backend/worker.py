@@ -289,9 +289,9 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             session.drain(0.5)
             runner = CommandRunner(session, prompt_patterns)
             
-            # Disable paging for predictable output
+            # Disable paging (best-effort; dynamic detection handles it if it fails)
             runner.disable_paging()
-            log("Attempted to disable pagination for the session.")
+            log("Interactive pagination handler active.")
             
             # 3. Execute Steps (New Logic) or Template Body (Old Logic)
             active_steps = macro_steps or (target.job.template.steps if target.job.template else None)

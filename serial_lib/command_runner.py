@@ -80,26 +80,29 @@ class CommandRunner:
             full_output += chunk
             normalized = self.detector.normalize(full_output)
             
-            # 1. Check for pagination prompt at the VERY END of normalized output
-            # Use a slightly larger tail for better reliability
-            tail = normalized[-256:]
+            # 1. Check for pagination prompt
+            # Use small tail but search with the pagination regex
+            tail_len = 256
+            tail = normalized[-tail_len:]
+            
             if self.detector.PROMPT_PAGINATION.search(tail):
+                # Send space to continue
                 self.session.send(" ")
                 
-                # Remove ONLY the last instance of the pager prompt from the raw buffer
-                # Based on the normalized tail match
+                # Try to clean up the pager prompt from the buffer
+                # This makes the final output cleaner
                 matches = list(self.detector.PROMPT_PAGINATION.finditer(full_output))
                 if matches:
                     last_match = matches[-1]
-                    # Only truncate if it's near the end to avoid accidental deletions
+                    # Only remove if it's within the last chunk-ish to avoid data loss
                     if last_match.start() > len(full_output) - 128:
                         full_output = full_output[:last_match.start()]
                 
-                time.sleep(0.2)
+                time.sleep(0.2) # Wait for device to react
                 continue 
             
             # 2. Check for final prompt only if no pager was detected
-            if self.detector.PROMPT_PRIV.search(tail):
+            if self.detector.PROMPT_PRIV.search(normalized[-256:]):
                 return self.detector.normalize(full_output)
                 
         raise TimeoutError(f"Timed out waiting for final prompt after '{cmd}'.\nLast output seen:\n{full_output[-500:]}")
@@ -116,11 +119,17 @@ class CommandRunner:
         self.session.wait_for(self.detector.PROMPT_PRIV, timeout=10.0)
     
     def disable_paging(self):
-        """Best-effort attempt to disable pagination."""
-        self.session.send_line("terminal length 0")
+        """
+        Best-effort attempt to disable pagination.
+        Note: We no longer depend on this being successful as run_show 
+        now handles multi-vendor pagination dynamically.
+        """
         try:
-            self.wait_for_prompt(timeout=5.0)
-        except:
+            self.session.send_line("terminal length 0")
+            self.wait_for_prompt(timeout=3.0)
+        except Exception:
+             # If terminal length 0 is not supported, we just drain and continue.
+             # Dynamic pagination will handle the rest during command execution.
              self.session.drain(0.5)
 
     # Common CLI errors
@@ -152,6 +161,14 @@ class CommandRunner:
             # 1. Prioritize Pager
             if self.detector.PROMPT_PAGINATION.search(tail):
                 self.session.send(" ")
+                
+                # Cleanup pager prompt
+                matches = list(self.detector.PROMPT_PAGINATION.finditer(full_output))
+                if matches:
+                    last_match = matches[-1]
+                    if last_match.start() > len(full_output) - 128:
+                        full_output = full_output[:last_match.start()]
+                
                 time.sleep(0.2)
                 continue
                 

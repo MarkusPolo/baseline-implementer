@@ -36,11 +36,11 @@ active_consoles = set()
 
 @router.websocket("/ws/{port_id}")
 async def console_websocket(websocket: WebSocket, port_id: str):
+    import json
     port_path = os.path.expanduser(f"~/port{port_id}")
     print(f"debug: WebSocket connected for {port_path}", flush=True)
 
     if port_path in active_consoles:
-        # Simple retry logic to handle race conditions during rapid reconnects
         await asyncio.sleep(0.5)
         if port_path in active_consoles:
             await websocket.close(code=1008, reason="Port busy (Console active)")
@@ -51,7 +51,6 @@ async def console_websocket(websocket: WebSocket, port_id: str):
     
     session = None
     try:
-        # Check if port exists
         if not os.path.exists(port_path):
             await websocket.send_text(f"\r\n[Error: Port {port_path} does not exist]\r\n")
             await websocket.close()
@@ -59,7 +58,6 @@ async def console_websocket(websocket: WebSocket, port_id: str):
 
         session = SerialSession(port_path, baud=9600, timeout=0.1)
         try:
-            # Run connect in thread to avoid blocking if it takes time
             await asyncio.to_thread(session.connect)
         except serial.SerialException as e:
             await websocket.send_text(f"\r\n[Error: Could not open port: {str(e)}]\r\n")
@@ -68,12 +66,15 @@ async def console_websocket(websocket: WebSocket, port_id: str):
 
         await websocket.send_text(f"\r\n[Connected to {port_path}]\r\n")
 
-        # Bridge tasks
+        # Shared state for this session
+        state = {
+            "is_capturing": False,
+            "backspace_sequence": "\x7f" # Default
+        }
+
         async def serial_to_ws():
             try:
                 while True:
-                    # Run read in thread to avoid blocking (read_available reads 4096 bytes)
-                    # session.read_available is fast but could block slightly on I/O
                     data = await asyncio.to_thread(session.read_available)
                     if data:
                         await websocket.send_text(data)
@@ -81,20 +82,65 @@ async def console_websocket(websocket: WebSocket, port_id: str):
             except Exception:
                 pass
 
+        async def run_capture(command: str):
+            state["is_capturing"] = True
+            try:
+                from serial_lib.command_runner import CommandRunner
+                runner = CommandRunner(session)
+                
+                # We need to send the command and wait for prompt while handling pagination
+                # CommandRunner.run_show already does exactly this!
+                output = await asyncio.to_thread(runner.run_show, command)
+                
+                # Send result back via control message
+                await websocket.send_text(json.dumps({
+                    "type": "capture_result",
+                    "command": command,
+                    "output": output
+                }))
+            except Exception as e:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": f"Capture failed: {str(e)}"
+                }))
+            finally:
+                state["is_capturing"] = False
+
         async def ws_to_serial():
             try:
                 while True:
-                    # Receive raw bytes/text from xterm.js
-                    data = await websocket.receive_text()
-                    if data:
-                        # sending can block for 0.12s due to SerialSession.send sleep
-                        await asyncio.to_thread(session.send, data)
+                    msg = await websocket.receive_text()
+                    if not msg:
+                        continue
+                    
+                    # Check if it's a control message (JSON)
+                    if msg.startswith("{") and msg.endswith("}"):
+                        try:
+                            data = json.loads(msg)
+                            msg_type = data.get("type")
+                            
+                            if msg_type == "capture":
+                                cmd = data.get("command")
+                                if cmd:
+                                    asyncio.create_task(run_capture(cmd))
+                            elif msg_type == "set_backspace":
+                                state["backspace_sequence"] = data.get("sequence", "\x7f")
+                            continue
+                        except json.JSONDecodeError:
+                            pass # Not JSON, treat as raw data
+                    
+                    # Raw data (from xterm.js)
+                    # Handle Backspace Translation
+                    if msg == "\x7f": # xterm.js usually sends 127 for backspace
+                         msg = state["backspace_sequence"]
+                    
+                    if not state["is_capturing"]:
+                         await asyncio.to_thread(session.send, msg)
             except WebSocketDisconnect:
                 raise
             except Exception:
                 pass
         
-        # Run both concurrently
         await asyncio.gather(serial_to_ws(), ws_to_serial())
 
     except WebSocketDisconnect:

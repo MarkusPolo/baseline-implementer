@@ -32,6 +32,12 @@ class SerialSession:
         b = self.ser.read(4096)
         return b.decode(errors="replace") if b else ""
 
+    def read(self, size: int = 1) -> str:
+        if not self.ser:
+            raise RuntimeError("Serial port not open")
+        b = self.ser.read(size)
+        return b.decode(errors="replace") if b else ""
+
     def drain(self, seconds: float = 0.8) -> str:
         end = time.monotonic() + seconds
         out = []

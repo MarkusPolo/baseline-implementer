@@ -1,12 +1,7 @@
 - Sometimes the job will fail, because the Switch was sleeping. I need to add 3 "returns" and some waiting time to the beginning of the template.
-- When alot of people are using the application, there will be alot of templates. I need a way to have it more organized. And you should be able to search for templates. And you should be able to sort them by name, date, etc. And you should be able to delete templates.
 
+- template deletion is working, failed to delete
 
+- Help Page, with really detailed german explanation of the application. Videos, screenshots, etc. And Workflow explanation.
 
-- Help Page
-
-
-
-
-![screenshot of template builder/editing](image.png)
--> remove the Basline Template Checkbox and Device Profile, its obsolete
+- Verify Username/Password input on switches that need that. Password verification is really slow on a lot of devices, so worker needs to wait until it is finished and input prompt appears.

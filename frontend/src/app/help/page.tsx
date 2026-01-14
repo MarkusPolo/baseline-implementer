@@ -4,70 +4,95 @@ import {
     Terminal,
     FileText,
     PlayCircle,
-    Settings,
     ShieldCheck,
-    Cpu,
-    BookOpen
+    BookOpen,
+    Image as ImageIcon,
+    Video,
+    Workflow
 } from 'lucide-react';
 
 export default function HelpPage() {
     return (
         <div className="space-y-8 pb-10">
             <div>
-                <h1 className="text-3xl font-bold text-white mb-2">Documentation & Help</h1>
-                <p className="text-neutral-400">Guides and reference for using the Serial Switch Configurator.</p>
+                <h1 className="text-3xl font-bold text-white mb-2">Hilfe & Dokumentation</h1>
+                <p className="text-neutral-400">Anleitungen und Referenzen für den Serial Switch Configurator.</p>
+            </div>
+
+            {/* Workflow Section */}
+            <div className="rounded-xl border border-blue-900/50 bg-blue-950/10 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <Workflow className="h-6 w-6 text-blue-400" />
+                    <h2 className="text-xl font-bold text-white">Workflow Übersicht</h2>
+                </div>
+                <div className="prose prose-invert max-w-none">
+                    <p className="text-neutral-300">
+                        Hier wird der allgemeine Arbeitsablauf beschrieben.
+                        {/* TODO: Detaillierte Workflow-Beschreibung hier einfügen */}
+                        (Platzhalter für detaillierte Workflow-Beschreibung: Vom Verbinden über das Erstellen von Templates bis zum Ausführen von Jobs.)
+                    </p>
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Placeholder Steps */}
+                        <WorkflowStep number="1" title="Verbinden" description="Verbindung zum Switch herstellen." />
+                        <WorkflowStep number="2" title="Erstellen" description="Template oder Makro aufzeichnen." />
+                        <WorkflowStep number="3" title="Ausführen" description="Konfiguration automatisch anwenden." />
+                    </div>
+                </div>
             </div>
 
             <div className="grid gap-6 md:grid-cols-2">
                 <Section
                     icon={<Terminal className="h-6 w-6 text-blue-400" />}
-                    title="Live Console"
-                    description="Interact directly with connected devices."
+                    title="Live Konsole"
+                    description="Direkte Interaktion mit verbundenen Geräten."
                 >
                     <ul className="list-disc list-inside space-y-2 text-sm text-neutral-400 mt-4">
-                        <li>Connect to serial ports via the <strong>Dashboard</strong> or <strong>New Session</strong> button.</li>
-                        <li>Type commands directly into the terminal.</li>
-                        <li>Use <strong>Record</strong> to capture command sequences for Macros.</li>
-                        <li>Save recorded sequences as <strong>Templates</strong> for reuse.</li>
+                        <li>Verbinden Sie sich über das <strong>Dashboard</strong> oder den <strong>New Session</strong> Button.</li>
+                        <li>Geben Sie Befehle direkt in das Terminal ein.</li>
+                        <li>Nutzen Sie <strong>Record</strong>, um Befehlsfolgen als Makros aufzuzeichnen.</li>
+                        <li>Speichern Sie Aufnahmen als <strong>Templates</strong> zur Wiederverwendung.</li>
                     </ul>
+                    {/* Placeholder for Media */}
+                    <MediaPlaceholder type="screenshot" label="Screenshot der Live Konsole" />
                 </Section>
 
                 <Section
                     icon={<FileText className="h-6 w-6 text-emerald-400" />}
-                    title="Templates & Macros"
-                    description="Standardize configurations and automation sequences."
+                    title="Templates & Makros"
+                    description="Standardisierung von Konfigurationen."
                 >
                     <ul className="list-disc list-inside space-y-2 text-sm text-neutral-400 mt-4">
-                        <li><strong>Templates</strong> allow defining reusable configuration steps.</li>
-                        <li>Use variables like <code>{`{{ hostname }}`}</code> to make templates dynamic.</li>
-                        <li><strong>Verification</strong> steps use Regex to validate device state.</li>
-                        <li>Use the <strong>Builder</strong> to visually construct sequences with drag-and-drop.</li>
+                        <li><strong>Templates</strong> definieren wiederverwendbare Schritte.</li>
+                        <li>Nutzen Sie Variablen wie <code>{`{{ hostname }}`}</code> für dynamische Inhalte.</li>
+                        <li><strong>Verifikation</strong> nutzt Regex zur Validierung.</li>
+                        <li>Der <strong>Builder</strong> ermöglicht visuelles Erstellen per Drag-and-Drop.</li>
                     </ul>
+                    {/* Placeholder for Media */}
+                    <MediaPlaceholder type="video" label="Video: Template Erstellung" />
                 </Section>
 
                 <Section
                     icon={<PlayCircle className="h-6 w-6 text-amber-400" />}
-                    title="Jobs & Automation"
-                    description="Run templates across multiple devices."
+                    title="Jobs & Automatisierung"
+                    description="Templates auf mehrere Geräte anwenden."
                 >
                     <ul className="list-disc list-inside space-y-2 text-sm text-neutral-400 mt-4">
-                        <li>Create a <strong>Job</strong> to apply a Template to a Port.</li>
-                        <li>Fill in required variables (e.g., IP addresses, VLAN IDs).</li>
-                        <li>View real-time logs and status in the <strong>Jobs</strong> dashboard.</li>
-                        <li>Jobs are processed by the background <strong>Worker</strong>.</li>
+                        <li>Erstellen Sie einen <strong>Job</strong>, um ein Template auf einen Port anzuwenden.</li>
+                        <li>Füllen Sie benötigte Variablen (z.B. IP, VLAN) aus.</li>
+                        <li>Verfolgen Sie Logs und Status im <strong>Jobs</strong> Dashboard.</li>
                     </ul>
+                    <MediaPlaceholder type="screenshot" label="Screenshot der Job-Übersicht" />
                 </Section>
 
                 <Section
                     icon={<ShieldCheck className="h-6 w-6 text-rose-400" />}
-                    title="Verification & Safety"
-                    description="Ensure compliance and prevent errors."
+                    title="Verifikation & Sicherheit"
+                    description="Fehlervermeidung und Compliance."
                 >
                     <ul className="list-disc list-inside space-y-2 text-sm text-neutral-400 mt-4">
-                        <li><strong>Regex Match</strong>: Ensures a pattern exists in the output.</li>
-                        <li><strong>Regex Not Present</strong>: Ensures a pattern does NOT exist.</li>
-                        <li><strong>Contains</strong>: Simple text matching.</li>
-                        <li>Multi-line matching is supported for complex configurations.</li>
+                        <li><strong>Regex Match</strong>: Prüft, ob ein Muster existiert.</li>
+                        <li><strong>Regex Not Present</strong>: Prüft, ob ein Muster NICHT existiert.</li>
+                        <li><strong>Contains</strong>: Einfache Textsuche.</li>
                     </ul>
                 </Section>
             </div>
@@ -75,16 +100,16 @@ export default function HelpPage() {
             <div className="rounded-xl border border-neutral-800 bg-neutral-900/30 p-6 mt-8">
                 <div className="flex items-center gap-3 mb-4">
                     <BookOpen className="h-6 w-6 text-neutral-300" />
-                    <h2 className="text-xl font-semibold text-white">General Tips</h2>
+                    <h2 className="text-xl font-semibold text-white">Allgemeine Tipps</h2>
                 </div>
                 <div className="grid md:grid-cols-2 gap-6 text-sm text-neutral-400">
                     <div>
                         <h3 className="font-bold text-neutral-300 mb-2">Shortcuts</h3>
-                        <p>Currently, standard browser shortcuts apply. Use Tab to navigate form fields.</p>
+                        <p>Aktuell gelten die Standard-Browser-Shortcuts. Nutzen Sie Tab zur Navigation.</p>
                     </div>
                     <div>
-                        <h3 className="font-bold text-neutral-300 mb-2">Troubleshooting</h3>
-                        <p>If a device isn't responding, check the physical connection and ensure no other software is using the serial port.</p>
+                        <h3 className="font-bold text-neutral-300 mb-2">Fehlerbehebung</h3>
+                        <p>Falls ein Gerät nicht antwortet, prüfen Sie die physische Verbindung.</p>
                     </div>
                 </div>
             </div>
@@ -105,6 +130,31 @@ function Section({ icon, title, description, children }: { icon: React.ReactNode
                 </div>
             </div>
             {children}
+        </div>
+    );
+}
+
+function WorkflowStep({ number, title, description }: { number: string, title: string, description: string }) {
+    return (
+        <div className="flex items-center gap-3 bg-neutral-900/50 p-3 rounded-lg border border-neutral-800">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 font-bold text-white shrink-0">
+                {number}
+            </div>
+            <div>
+                <div className="font-bold text-white text-sm">{title}</div>
+                <div className="text-xs text-neutral-400">{description}</div>
+            </div>
+        </div>
+    )
+}
+
+function MediaPlaceholder({ type, label }: { type: 'video' | 'screenshot', label: string }) {
+    return (
+        <div className="mt-4 border-2 border-dashed border-neutral-800 rounded-lg p-6 flex flex-col items-center justify-center text-neutral-600 bg-neutral-950/30 min-h-[150px]">
+            {type === 'video' ? <Video className="h-8 w-8 mb-2 opacity-50" /> : <ImageIcon className="h-8 w-8 mb-2 opacity-50" />}
+            <span className="text-xs font-mono bg-neutral-900 px-2 py-1 rounded border border-neutral-800">
+                INSERT {type.toUpperCase()}: {label}
+            </span>
         </div>
     );
 }

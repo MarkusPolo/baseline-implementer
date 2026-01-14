@@ -57,3 +57,18 @@ def update_template(template_id: int, template_update: schemas.TemplateUpdate, d
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     return db_template
+
+@router.delete("/{template_id}", status_code=204)
+def delete_template(template_id: int, db: Session = Depends(database.get_db)):
+    db_template = db.query(models.Template).filter(models.Template.id == template_id).first()
+    if not db_template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    try:
+        db.delete(db_template)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    return None
+

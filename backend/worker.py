@@ -169,9 +169,34 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
                         
                         # Use IGNORECASE for the fuzzy match to be extra forgiving and helpful
                         if re.search(norm_pattern, norm_output, re.IGNORECASE):
+                            # Try to find the actual match in the original output to provide evidence
+                            # We escape the pattern and replace escaped spaces with \s+ 
+                            # (not perfect for complex regex, but good for simple literal patterns)
+                            try:
+                                # Simple approach: split by whitespace and rejoin with \s+
+                                # Use re.escape on each word if we suspect the user gave literal text
+                                # If it's a regex, we still try the \s+ join
+                                tokens = pattern.split()
+                                if tokens:
+                                    relaxed_search_pattern = r"\s+".join([re.escape(t) for t in tokens])
+                                    match_orig = re.search(relaxed_search_pattern, output, re.IGNORECASE | re.DOTALL)
+                                    
+                                    if match_orig:
+                                        lines = output.splitlines()
+                                        match_line_idx = output[:match_orig.start()].count("\n")
+                                        start_idx = max(0, match_line_idx - evidence_lines)
+                                        end_idx = min(len(lines), match_line_idx + evidence_lines + 1)
+                                        evidence = "\n".join(lines[start_idx:end_idx])
+                                    else:
+                                        evidence = "(Relaxed match successful - lines found but context extraction failed)"
+                                else:
+                                    evidence = "(Relaxed match successful)"
+                            except Exception:
+                                evidence = "(Relaxed match successful)"
+
                             res.update({
                                 "status": "pass",
-                                "evidence": "(Relaxed match successful)",
+                                "evidence": evidence,
                                 "message": f"Pattern matched (relaxed conformance): {pattern}"
                             })
                         else:

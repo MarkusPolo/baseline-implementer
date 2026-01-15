@@ -21,7 +21,8 @@ class PromptDetector:
         "priv": r"(?:^|[\r\n]).*?#\s*\Z",
         "config": r".*?\(config[^\)]*\)#\s*\Z",
         "any": r".*?[>#]\s*\Z",
-        "password": r"^[Pp]assword:\s*\Z",
+        "username": r"(?:[Ll]ogin|[Uu]sername|[Uu]ser [Nn]ame|[Uu]ser|[Uu]ser-[Nn]ame)\s*:\s*\Z",
+        "password": r"(?:[Pp]assword|[Pp]asswd|[Pp]ass)\s*:\s*\Z",
         "pagination": r"\s*--\s*more\s*--|^\s*more\s*:|press\s+any\s+key|press\s+enter|hit\s+any\s+key|q\s*=\s*quit|space\s*bar\s*to\s+continue|next\s+page|\[\s*more\s*\]"
     }
     
@@ -30,7 +31,7 @@ class PromptDetector:
         Initialize PromptDetector with custom or default patterns.
         
         Args:
-            patterns: Dict with keys 'user', 'priv', 'config', 'any', 'password', 'pagination'
+            patterns: Dict with keys 'user', 'priv', 'config', 'any', 'password', 'pagination', 'username'
         """
         p = self.DEFAULT_PATTERNS.copy()
         if patterns:
@@ -42,12 +43,14 @@ class PromptDetector:
         self.PROMPT_CONF = re.compile(p["config"], re.MULTILINE)
         self.PROMPT_ANY = re.compile(p["any"], re.MULTILINE)
         self.PROMPT_PWD = re.compile(p["password"], re.MULTILINE)
+        self.PROMPT_USERNAME = re.compile(p["username"], re.MULTILINE)
         
         # Pagination needs Case-Insensitivity and Multi-line
         self.PROMPT_PAGINATION = re.compile(p["pagination"], re.IGNORECASE | re.MULTILINE)
         
-        # Combined pattern for privilege escalation
+        # Combined patterns for state transitions
         self.PROMPT_PRIV_OR_PWD = re.compile(f"({p['priv']})|({p['password']})", re.MULTILINE)
+        self.PROMPT_USER_PWD_OR_LOGIN = re.compile(f"({p['any']})|({p['password']})|({p['username']})", re.MULTILINE)
     
     @staticmethod
     def normalize(text: str) -> str:

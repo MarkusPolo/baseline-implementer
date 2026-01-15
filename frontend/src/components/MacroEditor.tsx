@@ -9,6 +9,8 @@ interface MacroStep {
     wait_prompt?: boolean;
     pattern?: string; // for expect/verify
     response?: string; // for expect
+    username?: string; // for authenticate
+    password?: string; // for authenticate
 }
 
 interface MacroEditorProps {
@@ -204,7 +206,12 @@ export function MacroEditor({ initialSteps, initialName = "", initialDescription
                 {/* Steps List */}
                 <div className="md:col-span-2 space-y-3">
                     <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-sm font-semibold text-neutral-300">Command Sequence</h3>
+                        <div className="flex flex-col gap-1">
+                            <h3 className="text-sm font-semibold text-neutral-300">Command Sequence</h3>
+                            <p className="text-[10px] text-neutral-500 italic">
+                                Note: If the switch is already unlocked, login credentials at the beginning are not necessary.
+                            </p>
+                        </div>
                         <button
                             onClick={addStep}
                             className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
@@ -236,6 +243,7 @@ export function MacroEditor({ initialSteps, initialName = "", initialDescription
                                             <option value="send">Send Command</option>
                                             <option value="expect">Expect/Send</option>
                                             <option value="verify">Verify Output</option>
+                                            <option value="authenticate">Login / Auth</option>
                                         </select>
                                     </div>
 
@@ -318,6 +326,31 @@ export function MacroEditor({ initialSteps, initialName = "", initialDescription
                                                     onChange={(e) => updateStep(i, "pattern", e.target.value)}
                                                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500/30 font-mono min-h-[80px]"
                                                     placeholder="Regex to match (supports multi-line)..."
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {step.type === "authenticate" && (
+                                        <div className="grid grid-cols-2 gap-3 pb-2">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] uppercase font-bold text-neutral-600 tracking-widest pl-1">Username</label>
+                                                <input
+                                                    type="text"
+                                                    value={step.username || "{{username}}"}
+                                                    onChange={(e) => updateStep(i, "username", e.target.value)}
+                                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500/30 font-mono"
+                                                    placeholder="Username prompt response..."
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] uppercase font-bold text-neutral-600 tracking-widest pl-1">Password</label>
+                                                <input
+                                                    type="text"
+                                                    value={step.password || "{{password}}"}
+                                                    onChange={(e) => updateStep(i, "password", e.target.value)}
+                                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500/30 font-mono"
+                                                    placeholder="Password prompt response..."
                                                 />
                                             </div>
                                         </div>

@@ -31,7 +31,7 @@ class CommandRunner:
         out += self.session.wait_for(self.detector.PROMPT_ANY, timeout=8.0)
         return out
 
-    def ensure_priv_exec(self, custom_command: Optional[str] = None):
+    def ensure_priv_exec(self, custom_command: Optional[str] = None, password: Optional[str] = None):
         buf = self.get_prompted()
 
         prompt_type = self.detector.detect(buf)
@@ -49,7 +49,12 @@ class CommandRunner:
             out = self.session.wait_for(self.detector.PROMPT_PRIV_OR_PWD, timeout=10.0)
             
             if self.detector.PROMPT_PWD.search(out):
-                raise RuntimeError("Enable password prompt detected; add password handling.")
+                if password:
+                    self.session.send_line(password)
+                    # Wait for priv prompt after password
+                    out = self.session.wait_for(self.detector.PROMPT_PRIV, timeout=15.0)
+                else:
+                    raise RuntimeError("Enable password prompt detected but no password provided.")
             
             if not self.detector.PROMPT_PRIV.search(out):
                  raise RuntimeError(f"Unexpected response after '{cmd}':\n{out[-400:]}")
@@ -57,6 +62,57 @@ class CommandRunner:
 
         # Unknown prompt style
         raise RuntimeError(f"Could not determine prompt state. Buffer tail:\n{buf[-400:]}")
+
+    def authenticate(self, username: Optional[str] = None, password: Optional[str] = None, timeout: float = 30.0):
+        """
+        Robustly handle initial login if the device presents a username or password prompt.
+        If already at a prompt, does nothing.
+        """
+        # First, try to get ANY prompt or login-related string
+        buf = ""
+        end_time = time.monotonic() + 10.0
+        while time.monotonic() < end_time:
+            self.session.send_line("")
+            time.sleep(0.5)
+            chunk = self.session.read_available()
+            buf += chunk
+            if self.detector.PROMPT_USER_PWD_OR_LOGIN.search(buf):
+                break
+        
+        # Now handle the state machine
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            normalized = self.detector.normalize(buf)
+            
+            # 1. Check if we already have a functional prompt
+            if self.detector.PROMPT_ANY.search(normalized):
+                return # Authenticated!
+            
+            # 2. Check for Username prompt
+            if self.detector.PROMPT_USERNAME.search(normalized):
+                if username:
+                    self.session.send_line(username)
+                    buf = self.session.wait_for(self.detector.PROMPT_USER_PWD_OR_LOGIN, timeout=10.0)
+                    continue
+                else:
+                    raise RuntimeError("Username prompt detected but no username provided.")
+                    
+            # 3. Check for Password prompt
+            if self.detector.PROMPT_PWD.search(normalized):
+                if password:
+                    self.session.send_line(password)
+                    # Wait longer for password verification as it's often slow
+                    buf = self.session.wait_for(self.detector.PROMPT_USER_PWD_OR_LOGIN, timeout=20.0)
+                    continue
+                else:
+                    raise RuntimeError("Password prompt detected but no password provided.")
+            
+            # If we don't recognize anything, try to wake it up again
+            self.session.send_line("")
+            time.sleep(1.0)
+            buf = self.session.read_available()
+            
+        raise TimeoutError("Timed out during authentication sequence.")
 
     def run_show(self, cmd: str, timeout: float = 60.0, on_data: Optional[Callable[[str], None]] = None) -> str:
         """

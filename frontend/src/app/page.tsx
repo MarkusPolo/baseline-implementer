@@ -22,7 +22,7 @@ export default function Home() {
           <Play className="h-4 w-4" />
           Start New Job
         </Link>
-        <Link href="/templates/wizard" className="flex items-center gap-2 rounded-lg bg-neutral-800 px-4 py-2 text-sm font-semibold text-neutral-200 hover:bg-neutral-700 transition-colors border border-neutral-700">
+        <Link href="/templates/builder" className="flex items-center gap-2 rounded-lg bg-neutral-800 px-4 py-2 text-sm font-semibold text-neutral-200 hover:bg-neutral-700 transition-colors border border-neutral-700">
           <FileText className="h-4 w-4" />
           Create Template
         </Link>

@@ -411,8 +411,22 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
 
                     elif step_type == "priv_mode":
                          cmd = step.get("content") or step.get("command")
-                         runner.ensure_priv_exec(custom_command=cmd)
+                         pwd = target.variables.get("enable_password") or target.variables.get("password")
+                         runner.ensure_priv_exec(custom_command=cmd, password=pwd)
                          log(f"Acquired privileged mode (using: {cmd or 'default'}).")
+
+                    elif step_type == "authenticate" or step_type == "login":
+                         user = step.get("username") or target.variables.get("username")
+                         pwd = step.get("password") or target.variables.get("password")
+                         
+                         if user:
+                             user = env.from_string(user).render(**target.variables)
+                         if pwd:
+                             pwd = env.from_string(pwd).render(**target.variables)
+                         
+                         log("Waiting for authentication/link-up...")
+                         runner.authenticate(username=user, password=pwd)
+                         log("Authenticated or already logged in.")
                          
                     elif step_type == "config_mode":
                          cmd = step.get("content") or step.get("command")
@@ -466,7 +480,8 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 rendered_config = template.render(**target.variables)
                 log("Template rendered successfully.")
                 
-                runner.ensure_priv_exec()
+                pwd = target.variables.get("enable_password") or target.variables.get("password")
+                runner.ensure_priv_exec(password=pwd)
                 log("Acquired privileged mode.")
                 
                 runner.enter_config_mode()

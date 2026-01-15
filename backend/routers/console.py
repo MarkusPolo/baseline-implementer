@@ -13,62 +13,21 @@ router = APIRouter(
 def test_console():
     return {"status": "console router reachable"}
 
-import subprocess
-
 @router.get("/ports")
-async def list_ports():
+def list_ports():
     ports = []
-    
-    async def check_port(i):
+    # Check ports 1-16
+    for i in range(1, 17):
         port_path = os.path.expanduser(f"~/port{i}")
         exists = os.path.exists(port_path)
         is_busy = port_path in active_consoles
         
-        is_locked = False
-        is_responding = False
-        
-        if exists:
-            # Check for lock (lsof returns 0 if file is open)
-            try:
-                # Run lsof to check if any process has the file open
-                # We use asyncio.to_thread since subprocess can block slightly
-                result = await asyncio.to_thread(
-                    subprocess.run, 
-                    ["lsof", port_path], 
-                    stdout=subprocess.DEVNULL, 
-                    stderr=subprocess.DEVNULL
-                )
-                is_locked = (result.returncode == 0)
-            except Exception:
-                pass
-
-            # Probe device if not locked by us (to avoid interfering with our own session)
-            # If validly locked by another process, we also cant probe easily without risk.
-            if not is_locked and not is_busy:
-                try:
-                    def probe():
-                        try:
-                            with serial.Serial(port_path, baudrate=9600, timeout=0.1) as ser:
-                                ser.write(b'\r')
-                                return ser.read(1) != b''
-                        except:
-                            return False
-                            
-                    is_responding = await asyncio.to_thread(probe)
-                except Exception:
-                    pass
-        
-        return {
+        ports.append({
             "id": i,
             "path": port_path,
-            "connected": exists, # File/Device exists
-            "busy": is_busy,     # Active in this Backend process
-            "locked": is_locked, # Opened by ANY process (lsof)
-            "responding": is_responding # Responded to \r
-        }
-
-    tasks = [check_port(i) for i in range(1, 17)]
-    ports = await asyncio.gather(*tasks)
+            "connected": exists, # "connected" means the device/symlink exists
+            "busy": is_busy
+        })
     return ports
 
 # In-memory lock for active console sessions in this process

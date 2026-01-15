@@ -12,5 +12,6 @@
   "/profiles/page": "/profiles",
   "/settings/page": "/settings",
   "/templates/builder/page": "/templates/builder",
-  "/templates/page": "/templates"
+  "/templates/page": "/templates",
+  "/templates/wizard/page": "/templates/wizard"
 }

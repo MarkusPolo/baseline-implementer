@@ -48,13 +48,9 @@ async def list_ports():
                 try:
                     def probe():
                         try:
-                            # Try up to 3 times to get a response
                             with serial.Serial(port_path, baudrate=9600, timeout=0.1) as ser:
-                                for _ in range(3):
-                                    ser.write(b'\r')
-                                    if ser.read(1) != b'':
-                                        return True
-                                return False
+                                ser.write(b'\r')
+                                return ser.read(1) != b''
                         except:
                             return False
                             

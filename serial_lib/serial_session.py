@@ -9,7 +9,7 @@ class SerialSession:
         self.baud = baud
         self.timeout = timeout
         self.ser: Optional[serial.Serial] = None
-        self.write_delay = 0.02 # Reduced from 0.12 to improve interactive performance
+        self.write_delay = 0.12
 
     def connect(self):
         self.ser = serial.Serial(

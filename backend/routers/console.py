@@ -15,78 +15,63 @@ router = APIRouter(
 def test_console():
     return {"status": "console router reachable"}
 
-# Probing cache to reduce overhead
-probe_cache = {}
-PROBE_CACHE_TTL = 10 # seconds
-probe_semaphore = asyncio.Semaphore(4) # Limit concurrent probes
+import subprocess
 
 @router.get("/ports")
 async def list_ports():
+    ports = []
+    
     async def check_port(i):
         port_path = os.path.expanduser(f"~/port{i}")
+        exists = os.path.exists(port_path)
+        is_busy = port_path in active_consoles
         
-        # Check cache first
-        now = asyncio.get_event_loop().time()
-        if port_path in probe_cache:
-            cached_time, cached_data = probe_cache[port_path]
-            if now - cached_time < PROBE_CACHE_TTL:
-                # Still update 'busy' from in-memory state
-                cached_data["busy"] = port_path in active_consoles
-                return cached_data
+        is_locked = False
+        is_responding = False
+        
+        if exists:
+            # Check for lock (lsof returns 0 if file is open)
+            try:
+                # Run lsof to check if any process has the file open
+                # We use asyncio.to_thread since subprocess can block slightly
+                result = await asyncio.to_thread(
+                    subprocess.run, 
+                    ["lsof", port_path], 
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.DEVNULL
+                )
+                is_locked = (result.returncode == 0)
+            except Exception:
+                pass
 
-        async with probe_semaphore:
-            exists = os.path.exists(port_path)
-            is_busy = port_path in active_consoles
-            
-            is_locked = False
-            is_responding = False
-            
-            if exists:
-                # Check for lock (lsof returns 0 if file is open)
+            # Probe device if not locked by us (to avoid interfering with our own session)
+            # If validly locked by another process, we also cant probe easily without risk.
+            if not is_locked and not is_busy:
                 try:
-                    # Run lsof to check if any process has the file open
-                    # We use asyncio.to_thread since subprocess can block slightly
-                    result = await asyncio.to_thread(
-                        subprocess.run, 
-                        ["lsof", port_path], 
-                        stdout=subprocess.DEVNULL, 
-                        stderr=subprocess.DEVNULL
-                    )
-                    is_locked = (result.returncode == 0)
+                    def probe():
+                        try:
+                            # Try up to 3 times to get a response
+                            with serial.Serial(port_path, baudrate=9600, timeout=0.1) as ser:
+                                for _ in range(3):
+                                    ser.write(b'\r')
+                                    if ser.read(1) != b'':
+                                        return True
+                                return False
+                        except:
+                            return False
+                            
+                    is_responding = await asyncio.to_thread(probe)
                 except Exception:
                     pass
-
-                # Probe device if not locked by us (to avoid interfering with our own session)
-                # If validly locked by another process, we also cant probe easily without risk.
-                if not is_locked and not is_busy:
-                    try:
-                        def probe():
-                            try:
-                                # Try up to 3 times to get a response
-                                with serial.Serial(port_path, baudrate=9600, timeout=0.1) as ser:
-                                    for _ in range(3):
-                                        ser.write(b'\r')
-                                        if ser.read(1) != b'':
-                                            return True
-                                    return False
-                            except:
-                                return False
-                                
-                        is_responding = await asyncio.to_thread(probe)
-                    except Exception:
-                        pass
-            
-            res = {
-                "id": i,
-                "path": port_path,
-                "connected": exists, # File/Device exists
-                "busy": is_busy,     # Active in this Backend process
-                "locked": is_locked, # Opened by ANY process (lsof)
-                "responding": is_responding # Responded to \r
-            }
-            
-            probe_cache[port_path] = (now, res)
-            return res
+        
+        return {
+            "id": i,
+            "path": port_path,
+            "connected": exists, # File/Device exists
+            "busy": is_busy,     # Active in this Backend process
+            "locked": is_locked, # Opened by ANY process (lsof)
+            "responding": is_responding # Responded to \r
+        }
 
     tasks = [check_port(i) for i in range(1, 17)]
     ports = await asyncio.gather(*tasks)

@@ -74,3 +74,11 @@ class Macro(Base):
     config_schema = Column(JSON, nullable=True) # JSON schema for variables
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+class Setting(Base):
+    __tablename__ = "settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, index=True) # e.g., "port_baud_rates"
+    value = Column(JSON, nullable=False) # Store complex settings as JSON
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+

@@ -27,3 +27,12 @@ export const normalizeHeaders = (row: CSVRow): CSVRow => {
     }
     return normalized;
 };
+
+export const generateSampleCSV = (schemaProperties: Record<string, any>): Blob => {
+    const headers = ["Port", ...Object.keys(schemaProperties)];
+    const csvContent = [
+        headers.join(","),
+        ["1", ...Object.keys(schemaProperties).map(() => "")].join(",")
+    ].join("\n");
+    return new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+};

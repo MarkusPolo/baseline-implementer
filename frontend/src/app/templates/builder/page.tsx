@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
     Plus,
     Trash2,
@@ -18,7 +18,7 @@ import {
 import api from '@/lib/api';
 import { clsx } from 'clsx';
 
-type StepType = 'command' | 'verify' | 'priv_mode' | 'config_mode' | 'exit_config';
+type StepType = 'command' | 'verify' | 'priv_mode' | 'config_mode' | 'exit_config' | 'authenticate';
 
 interface Step {
     id: string;
@@ -28,21 +28,77 @@ interface Step {
     command?: string;
     check_type?: 'regex_match' | 'regex_not_present' | 'contains';
     pattern?: string;
+    username?: string;
+    password?: string;
 }
 
-export default function TemplateBuilder() {
+export default function TemplateBuilderPage() {
+    return (
+        <Suspense fallback={<div className="text-center py-10">Loading builder...</div>}>
+            <TemplateBuilder />
+        </Suspense>
+    );
+}
+
+function TemplateBuilder() {
     const router = useRouter();
     const [name, setName] = useState('');
-    const [isBaseline, setIsBaseline] = useState(false);
     const [steps, setSteps] = useState<Step[]>([]);
     const [loading, setLoading] = useState(false);
     const [detectedVars, setDetectedVars] = useState<string[]>([]);
-    const [profiles, setProfiles] = useState<any[]>([]);
-    const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
 
+    const searchParams = useSearchParams();
+    const editId = searchParams.get('id');
+
+    // Load template for editing
     useEffect(() => {
-        api.get('profiles/').then(res => setProfiles(res.data));
-    }, []);
+        if (editId) {
+            setLoading(true);
+            api.get(`templates/${editId}`)
+                .then(res => {
+                    const data = res.data;
+                    setName(data.name);
+                    // Add frontend IDs to steps and normalize data
+                    const stepsWithIds = (data.steps || []).map((s: any) => {
+                        let type = s.type;
+                        let content = s.content;
+                        let command = s.command;
+                        let check_type = s.check_type;
+
+                        // Normalize 'send' (from macros) to 'command'
+                        if (type === 'send') {
+                            type = 'command';
+                            content = s.cmd;
+                        }
+
+                        // Normalize 'verify' (from macros) fields
+                        if (type === 'verify') {
+                            if (s.cmd && !command) {
+                                command = s.cmd;
+                            }
+                            if (!check_type) {
+                                check_type = 'regex_match';
+                            }
+                        }
+
+                        return {
+                            ...s,
+                            id: Math.random().toString(36).substr(2, 9),
+                            type,
+                            content,
+                            command,
+                            check_type
+                        };
+                    });
+                    setSteps(stepsWithIds);
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("Failed to load template");
+                })
+                .finally(() => setLoading(false));
+        }
+    }, [editId]);
 
     // Detect variables whenever steps change
     useEffect(() => {
@@ -63,20 +119,10 @@ export default function TemplateBuilder() {
     const addStep = (type: StepType) => {
         let defaultContent = '';
 
-        // Attempt to get default command from profile
-        if (selectedProfileId) {
-            const profile = profiles.find(p => p.id === selectedProfileId);
-            if (profile?.commands) {
-                if (type === 'priv_mode') defaultContent = profile.commands.enable || 'en';
-                if (type === 'config_mode') defaultContent = profile.commands.enter_config || 'conf t';
-                if (type === 'exit_config') defaultContent = profile.commands.exit_config || 'end';
-            }
-        } else {
-            // Fallback defaults
-            if (type === 'priv_mode') defaultContent = 'en';
-            if (type === 'config_mode') defaultContent = 'conf t';
-            if (type === 'exit_config') defaultContent = 'end';
-        }
+        // Fallback defaults
+        if (type === 'priv_mode') defaultContent = 'en';
+        if (type === 'config_mode') defaultContent = 'conf t';
+        if (type === 'exit_config') defaultContent = 'end';
 
         const newStep: Step = {
             id: Math.random().toString(36).substr(2, 9),
@@ -86,6 +132,8 @@ export default function TemplateBuilder() {
             command: type === 'verify' ? 'show run' : undefined,
             check_type: type === 'verify' ? 'regex_match' : undefined,
             pattern: type === 'verify' ? '' : undefined,
+            username: type === 'authenticate' ? '{{ username }}' : undefined,
+            password: type === 'authenticate' ? '{{ password }}' : undefined,
         };
         setSteps([...steps, newStep]);
     };
@@ -123,14 +171,21 @@ export default function TemplateBuilder() {
                 required: detectedVars
             };
 
-            await api.post('templates/', {
+            const payload = {
                 name,
-                is_baseline: isBaseline ? 1 : 0,
-                profile_id: selectedProfileId,
+                is_baseline: 0,
+                profile_id: null,
                 steps: steps.map(({ id, ...rest }) => rest), // Remove UI-only ID
                 config_schema,
                 body: '', // Empty body as we use steps now
-            });
+            };
+
+            if (editId) {
+                await api.put(`templates/${editId}`, payload);
+            } else {
+                await api.post('templates/', payload);
+            }
+
             router.push('/templates');
         } catch (err) {
             console.error(err);
@@ -156,32 +211,6 @@ export default function TemplateBuilder() {
                             onChange={(e) => setName(e.target.value)}
                             className="bg-transparent text-xl font-bold text-white focus:outline-none border-b border-transparent focus:border-blue-500 transition-colors"
                         />
-                        <div className="flex items-center gap-4 mt-1">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    id="isBaseline"
-                                    checked={isBaseline}
-                                    onChange={(e) => setIsBaseline(e.target.checked)}
-                                    className="rounded border-neutral-800 bg-neutral-900 text-blue-600"
-                                />
-                                <label htmlFor="isBaseline" className="text-xs text-neutral-400">Baseline Template</label>
-                            </div>
-                            <div className="bg-neutral-800 h-3 w-px mx-1"></div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] uppercase font-bold text-neutral-500">Device Profile:</span>
-                                <select
-                                    value={selectedProfileId || ''}
-                                    onChange={(e) => setSelectedProfileId(e.target.value ? Number(e.target.value) : null)}
-                                    className="bg-transparent text-xs text-neutral-300 focus:outline-none border-none cursor-pointer hover:text-white"
-                                >
-                                    <option value="">None (Generic)</option>
-                                    {profiles.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <button
@@ -204,6 +233,7 @@ export default function TemplateBuilder() {
                             <ToolboxAction icon={<ShieldCheck className="h-4 w-4" />} label="Verification" onClick={() => addStep('verify')} />
                             <div className="pt-4 border-t border-neutral-800 mt-4">
                                 <h4 className="text-[10px] font-bold text-neutral-500 mb-2 uppercase">Predefined</h4>
+                                <ToolboxAction icon={<Settings className="h-4 w-4" />} label="Login / Auth" onClick={() => addStep('authenticate')} />
                                 <ToolboxAction icon={<Settings className="h-4 w-4" />} label="Enter Privileged" onClick={() => addStep('priv_mode')} />
                                 <ToolboxAction icon={<Settings className="h-4 w-4" />} label="Enter Config" onClick={() => addStep('config_mode')} />
                                 <ToolboxAction icon={<Settings className="h-4 w-4" />} label="Exit Config" onClick={() => addStep('exit_config')} />
@@ -327,6 +357,40 @@ export default function TemplateBuilder() {
                                             <div className="bg-neutral-950/50 border border-neutral-800/50 rounded-lg p-2 text-[10px] text-neutral-500 flex items-center gap-2">
                                                 <ChevronRight className="h-3 w-3" />
                                                 This step uses the specified command to transition device state.
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {step.type === 'authenticate' && (
+                                        <div className="space-y-4">
+                                            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-400 flex items-start gap-3">
+                                                <Settings className="h-4 w-4 mt-0.5" />
+                                                <p>
+                                                    <strong>Note:</strong> If the switch is already unlocked, login credentials at the beginning are not necessary.
+                                                    This step handles initial Username and Password prompts.
+                                                </p>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">Username</label>
+                                                    <input
+                                                        type="text"
+                                                        value={step.username}
+                                                        onChange={(e) => updateStep(step.id, { username: e.target.value })}
+                                                        placeholder="{{ username }}"
+                                                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm font-mono text-emerald-400 focus:outline-none focus:border-blue-500"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">Password</label>
+                                                    <input
+                                                        type="text"
+                                                        value={step.password}
+                                                        onChange={(e) => updateStep(step.id, { password: e.target.value })}
+                                                        placeholder="{{ password }}"
+                                                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm font-mono text-emerald-400 focus:outline-none focus:border-blue-500"
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
                                     )}

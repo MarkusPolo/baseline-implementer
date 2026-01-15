@@ -2,7 +2,7 @@ import re
 import time
 from .serial_session import SerialSession
 from .prompt_detector import PromptDetector, PromptType
-from typing import Optional, Dict
+from typing import Optional, Dict, Callable
 
 class CommandRunner:
     def __init__(self, session: SerialSession, prompt_patterns: Optional[Dict[str, str]] = None):
@@ -31,7 +31,7 @@ class CommandRunner:
         out += self.session.wait_for(self.detector.PROMPT_ANY, timeout=8.0)
         return out
 
-    def ensure_priv_exec(self, custom_command: Optional[str] = None):
+    def ensure_priv_exec(self, custom_command: Optional[str] = None, password: Optional[str] = None):
         buf = self.get_prompted()
 
         prompt_type = self.detector.detect(buf)
@@ -49,7 +49,12 @@ class CommandRunner:
             out = self.session.wait_for(self.detector.PROMPT_PRIV_OR_PWD, timeout=10.0)
             
             if self.detector.PROMPT_PWD.search(out):
-                raise RuntimeError("Enable password prompt detected; add password handling.")
+                if password:
+                    self.session.send_line(password)
+                    # Wait for priv prompt after password
+                    out = self.session.wait_for(self.detector.PROMPT_PRIV, timeout=15.0)
+                else:
+                    raise RuntimeError("Enable password prompt detected but no password provided.")
             
             if not self.detector.PROMPT_PRIV.search(out):
                  raise RuntimeError(f"Unexpected response after '{cmd}':\n{out[-400:]}")
@@ -58,7 +63,58 @@ class CommandRunner:
         # Unknown prompt style
         raise RuntimeError(f"Could not determine prompt state. Buffer tail:\n{buf[-400:]}")
 
-    def run_show(self, cmd: str, timeout: float = 60.0) -> str:
+    def authenticate(self, username: Optional[str] = None, password: Optional[str] = None, timeout: float = 30.0):
+        """
+        Robustly handle initial login if the device presents a username or password prompt.
+        If already at a prompt, does nothing.
+        """
+        # First, try to get ANY prompt or login-related string
+        buf = ""
+        end_time = time.monotonic() + 10.0
+        while time.monotonic() < end_time:
+            self.session.send_line("")
+            time.sleep(0.5)
+            chunk = self.session.read_available()
+            buf += chunk
+            if self.detector.PROMPT_USER_PWD_OR_LOGIN.search(buf):
+                break
+        
+        # Now handle the state machine
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            normalized = self.detector.normalize(buf)
+            
+            # 1. Check if we already have a functional prompt
+            if self.detector.PROMPT_ANY.search(normalized):
+                return # Authenticated!
+            
+            # 2. Check for Username prompt
+            if self.detector.PROMPT_USERNAME.search(normalized):
+                if username:
+                    self.session.send_line(username)
+                    buf = self.session.wait_for(self.detector.PROMPT_USER_PWD_OR_LOGIN, timeout=10.0)
+                    continue
+                else:
+                    raise RuntimeError("Username prompt detected but no username provided.")
+                    
+            # 3. Check for Password prompt
+            if self.detector.PROMPT_PWD.search(normalized):
+                if password:
+                    self.session.send_line(password)
+                    # Wait longer for password verification as it's often slow
+                    buf = self.session.wait_for(self.detector.PROMPT_USER_PWD_OR_LOGIN, timeout=20.0)
+                    continue
+                else:
+                    raise RuntimeError("Password prompt detected but no password provided.")
+            
+            # If we don't recognize anything, try to wake it up again
+            self.session.send_line("")
+            time.sleep(1.0)
+            buf = self.session.read_available()
+            
+        raise TimeoutError("Timed out during authentication sequence.")
+
+    def run_show(self, cmd: str, timeout: float = 60.0, on_data: Optional[Callable[[str], None]] = None) -> str:
         """
         Execute a show command and handle pagination prompts automatically.
         Prioritizes pager detection over final prompt detection.
@@ -74,28 +130,35 @@ class CommandRunner:
                 time.sleep(0.1)
                 continue
             
+            if on_data:
+                on_data(chunk)
+
             full_output += chunk
             normalized = self.detector.normalize(full_output)
             
-            # 1. Check for pagination prompt at the VERY END of normalized output
-            # We use a small tail for efficiency but enough to catch the prompt
-            tail = normalized[-128:]
+            # 1. Check for pagination prompt
+            # Use small tail but search with the pagination regex
+            tail_len = 256
+            tail = normalized[-tail_len:]
+            
             if self.detector.PROMPT_PAGINATION.search(tail):
-                # Send space raw to get next page
+                # Send space to continue
                 self.session.send(" ")
-                # Remove the pager prompt from accumulated output to keep it clean
-                # We do this by finding the match in the full_output and slicing it
-                # or just letting normalization handle most of it if we are careful.
-                # Actually, the user suggested deleting it from the buffer.
-                match = self.detector.PROMPT_PAGINATION.search(full_output)
-                if match:
-                    full_output = full_output[:match.start()]
                 
-                time.sleep(0.2)
-                continue # Re-check after sending space
+                # Try to clean up the pager prompt from the buffer
+                # This makes the final output cleaner
+                matches = list(self.detector.PROMPT_PAGINATION.finditer(full_output))
+                if matches:
+                    last_match = matches[-1]
+                    # Only remove if it's within the last chunk-ish to avoid data loss
+                    if last_match.start() > len(full_output) - 128:
+                        full_output = full_output[:last_match.start()]
+                
+                time.sleep(0.2) # Wait for device to react
+                continue 
             
             # 2. Check for final prompt only if no pager was detected
-            if self.detector.PROMPT_PRIV.search(tail):
+            if self.detector.PROMPT_PRIV.search(normalized[-256:]):
                 return self.detector.normalize(full_output)
                 
         raise TimeoutError(f"Timed out waiting for final prompt after '{cmd}'.\nLast output seen:\n{full_output[-500:]}")
@@ -112,11 +175,17 @@ class CommandRunner:
         self.session.wait_for(self.detector.PROMPT_PRIV, timeout=10.0)
     
     def disable_paging(self):
-        """Best-effort attempt to disable pagination."""
-        self.session.send_line("terminal length 0")
+        """
+        Best-effort attempt to disable pagination.
+        Note: We no longer depend on this being successful as run_show 
+        now handles multi-vendor pagination dynamically.
+        """
         try:
-            self.wait_for_prompt(timeout=5.0)
-        except:
+            self.session.send_line("terminal length 0")
+            self.wait_for_prompt(timeout=3.0)
+        except Exception:
+             # If terminal length 0 is not supported, we just drain and continue.
+             # Dynamic pagination will handle the rest during command execution.
              self.session.drain(0.5)
 
     # Common CLI errors
@@ -127,7 +196,7 @@ class CommandRunner:
         re.compile(r"Error:", re.I)
     ]
 
-    def wait_for_prompt(self, timeout: float = 15.0) -> str:
+    def wait_for_prompt(self, timeout: float = 15.0, on_data: Optional[Callable[[str], None]] = None) -> str:
         """Wait for any valid prompt to appear and return the normalized buffer."""
         full_output = ""
         end_time = time.monotonic() + timeout
@@ -138,13 +207,24 @@ class CommandRunner:
                 time.sleep(0.1)
                 continue
             
+            if on_data:
+                on_data(chunk)
+
             full_output += chunk
             normalized = self.detector.normalize(full_output)
-            tail = normalized[-128:]
+            tail = normalized[-256:]
             
             # 1. Prioritize Pager
             if self.detector.PROMPT_PAGINATION.search(tail):
                 self.session.send(" ")
+                
+                # Cleanup pager prompt
+                matches = list(self.detector.PROMPT_PAGINATION.finditer(full_output))
+                if matches:
+                    last_match = matches[-1]
+                    if last_match.start() > len(full_output) - 128:
+                        full_output = full_output[:last_match.start()]
+                
                 time.sleep(0.2)
                 continue
                 

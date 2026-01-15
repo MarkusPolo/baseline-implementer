@@ -36,6 +36,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/macros/deploy/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/macros/edit/[id]",
+      "regex": "^/macros/edit/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/macros/edit/(?<nxtPid>[^/]+?)(?:/)?$"
     }
   ],
   "staticRoutes": [
@@ -68,6 +76,12 @@
       "regex": "^/favicon\\.ico(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/favicon\\.ico(?:/)?$"
+    },
+    {
+      "page": "/help",
+      "regex": "^/help(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/help(?:/)?$"
     },
     {
       "page": "/jobs",

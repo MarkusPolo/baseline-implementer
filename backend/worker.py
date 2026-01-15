@@ -160,11 +160,58 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
                         "message": f"Pattern matched: {pattern}"
                     })
                 else:
-                    res.update({
-                        "status": "fail",
-                        "evidence": output[-500:],  # Last 500 chars as evidence
-                        "message": f"Pattern not found: {pattern}"
-                    })
+                    # Fallback: Fuzzy Whitespace Match
+                    # This handles cases like "13   MGMT" vs "13 MGMT" (table spacing)
+                    # or " description" vs "description" (indentation).
+                    try:
+                        norm_pattern = " ".join(pattern.split())
+                        norm_output = " ".join(output.split())
+                        
+                        # Use IGNORECASE for the fuzzy match to be extra forgiving and helpful
+                        if re.search(norm_pattern, norm_output, re.IGNORECASE):
+                            # Try to find the actual match in the original output to provide evidence
+                            # We escape the pattern and replace escaped spaces with \s+ 
+                            # (not perfect for complex regex, but good for simple literal patterns)
+                            try:
+                                # Simple approach: split by whitespace and rejoin with \s+
+                                # Use re.escape on each word if we suspect the user gave literal text
+                                # If it's a regex, we still try the \s+ join
+                                tokens = pattern.split()
+                                if tokens:
+                                    relaxed_search_pattern = r"\s+".join([re.escape(t) for t in tokens])
+                                    match_orig = re.search(relaxed_search_pattern, output, re.IGNORECASE | re.DOTALL)
+                                    
+                                    if match_orig:
+                                        lines = output.splitlines()
+                                        match_line_idx = output[:match_orig.start()].count("\n")
+                                        start_idx = max(0, match_line_idx - evidence_lines)
+                                        end_idx = min(len(lines), match_line_idx + evidence_lines + 1)
+                                        evidence = "\n".join(lines[start_idx:end_idx])
+                                    else:
+                                        evidence = "(Relaxed match successful - lines found but context extraction failed)"
+                                else:
+                                    evidence = "(Relaxed match successful)"
+                            except Exception:
+                                evidence = "(Relaxed match successful)"
+
+                            res.update({
+                                "status": "pass",
+                                "evidence": evidence,
+                                "message": f"Pattern matched (relaxed conformance): {pattern}"
+                            })
+                        else:
+                            res.update({
+                                "status": "fail",
+                                "evidence": output[-500:],  # Last 500 chars as evidence
+                                "message": f"Pattern not found: {pattern}"
+                            })
+                    except Exception:
+                        # If normalization inadvertently breaks a complex regex, fall back to fail
+                        res.update({
+                            "status": "fail",
+                            "evidence": output[-500:],
+                            "message": f"Pattern not found: {pattern}"
+                        })
                     
             elif check_type == "regex_not_present":
                 flags = re.MULTILINE | re.DOTALL if "\n" in pattern else re.MULTILINE
@@ -284,14 +331,24 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             prompt_patterns = profile.prompt_patterns
             log(f"Using device profile: {profile.name} ({profile.vendor})")
         
-        with SerialSession(port_path) as session:
+        # Fetch baud rate from settings
+        baud = 9600
+        setting = db.query(models.Setting).filter(models.Setting.key == "port_baud_rates").first()
+        if setting:
+            # target.port might be "~/port1", so we extract the port ID
+            match = re.search(r"port(\d+)", target.port)
+            if match:
+                port_id = match.group(1)
+                baud = setting.value.get(port_id, 9600)
+
+        with SerialSession(port_path, baud=baud) as session:
             # Clear noise and wake up
             session.drain(0.5)
             runner = CommandRunner(session, prompt_patterns)
             
-            # Disable paging for predictable output
+            # Disable paging (best-effort; dynamic detection handles it if it fails)
             runner.disable_paging()
-            log("Attempted to disable pagination for the session.")
+            log("Interactive pagination handler active.")
             
             # 3. Execute Steps (New Logic) or Template Body (Old Logic)
             active_steps = macro_steps or (target.job.template.steps if target.job.template else None)
@@ -308,7 +365,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                     step_type = step.get("type", "send")
                     log(f"Step {i+1}: {step_type}")
                     
-                    if step_type == "send":
+                    if step_type in ["send", "command"]:
                         cmd_template = step.get("cmd", step.get("content", ""))
                         rendered_cmd = env.from_string(cmd_template).render(**target.variables)
                         session.send_line(rendered_cmd)
@@ -354,8 +411,22 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
 
                     elif step_type == "priv_mode":
                          cmd = step.get("content") or step.get("command")
-                         runner.ensure_priv_exec(custom_command=cmd)
+                         pwd = target.variables.get("enable_password") or target.variables.get("password")
+                         runner.ensure_priv_exec(custom_command=cmd, password=pwd)
                          log(f"Acquired privileged mode (using: {cmd or 'default'}).")
+
+                    elif step_type == "authenticate" or step_type == "login":
+                         user = step.get("username") or target.variables.get("username")
+                         pwd = step.get("password") or target.variables.get("password")
+                         
+                         if user:
+                             user = env.from_string(user).render(**target.variables)
+                         if pwd:
+                             pwd = env.from_string(pwd).render(**target.variables)
+                         
+                         log("Waiting for authentication/link-up...")
+                         runner.authenticate(username=user, password=pwd)
+                         log("Authenticated or already logged in.")
                          
                     elif step_type == "config_mode":
                          cmd = step.get("content") or step.get("command")
@@ -369,6 +440,10 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 
                 # Run all verification steps at the end
                 if verification_steps:
+                    # DRAIN: Wait for Syslog messages (e.g. "%SYS-5-CONFIG_I") to clear
+                    log("Draining buffer (2s) to clear Syslog messages...")
+                    session.drain(2.0)
+
                     log(f"Running {len(verification_steps)} verification steps...")
                     checks = []
                     for i, step in enumerate(verification_steps):
@@ -405,23 +480,46 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 rendered_config = template.render(**target.variables)
                 log("Template rendered successfully.")
                 
-                runner.ensure_priv_exec()
+                pwd = target.variables.get("enable_password") or target.variables.get("password")
+                runner.ensure_priv_exec(password=pwd)
                 log("Acquired privileged mode.")
                 
                 runner.enter_config_mode()
                 log("Entered config mode.")
                 
                 # Send config line by line
+                redundant_cmds = ["en", "enable", "conf", "configure", "conf t", "configure terminal"]
+                
                 for line in rendered_config.splitlines():
-                    if line.strip():
-                         session.send_line(line)
-                         time.sleep(0.1) 
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                        
+                    # Filter redundant commands
+                    if stripped.lower() in redundant_cmds:
+                        log(f"Skipping redundant command: {stripped}")
+                        continue
+
+                    session.send_line(stripped)
+                    # We don't wait for a prompt here to be fast, but we should check for errors
+                    # and give a tiny bit of time for the buffer to fill if there's an error
+                    time.sleep(0.2) 
+                    
+                    # Opportunistic error check
+                    out = session.read_available()
+                    error_msg = runner.check_for_errors(out)
+                    if error_msg:
+                        log(f"WARNING: Error after '{stripped}': {error_msg}")
                 
                 log("Config sent.")
                 runner.exit_config_mode()
                 
                 # Run verification checks
                 if verification_checks:
+                    # DRAIN: Wait for Syslog messages
+                    log("Draining buffer (2s) to clear Syslog messages...")
+                    session.drain(2.0)
+                    
                     log(f"Running {len(verification_checks)} verification check(s)...")
                     check_results = run_verification_checks(runner, verification_checks, target.variables, log_func=log)
                     target.verification_results = check_results

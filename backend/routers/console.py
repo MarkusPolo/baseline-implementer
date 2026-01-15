@@ -4,6 +4,11 @@ import os
 import serial
 from serial_lib.serial_session import SerialSession
 
+from ..database import SessionLocal, get_db
+from .. import models, schemas
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
 router = APIRouter(
     prefix="/console",
     tags=["console"]
@@ -14,19 +19,30 @@ def test_console():
     return {"status": "console router reachable"}
 
 @router.get("/ports")
-def list_ports():
+def list_ports(db: Session = Depends(get_db)):
     ports = []
+    
+    # Fetch baud rates from settings
+    baud_rates = {}
+    setting = db.query(models.Setting).filter(models.Setting.key == "port_baud_rates").first()
+    if setting:
+        baud_rates = setting.value
+        
     # Check ports 1-16
     for i in range(1, 17):
         port_path = os.path.expanduser(f"~/port{i}")
         exists = os.path.exists(port_path)
         is_busy = port_path in active_consoles
         
+        # Determine baud rate (default 9600)
+        baud = baud_rates.get(str(i), 9600)
+        
         ports.append({
             "id": i,
             "path": port_path,
             "connected": exists, # "connected" means the device/symlink exists
-            "busy": is_busy
+            "busy": is_busy,
+            "baud": baud
         })
     return ports
 
@@ -36,11 +52,11 @@ active_consoles = set()
 
 @router.websocket("/ws/{port_id}")
 async def console_websocket(websocket: WebSocket, port_id: str):
+    import json
     port_path = os.path.expanduser(f"~/port{port_id}")
     print(f"debug: WebSocket connected for {port_path}", flush=True)
 
     if port_path in active_consoles:
-        # Simple retry logic to handle race conditions during rapid reconnects
         await asyncio.sleep(0.5)
         if port_path in active_consoles:
             await websocket.close(code=1008, reason="Port busy (Console active)")
@@ -51,15 +67,20 @@ async def console_websocket(websocket: WebSocket, port_id: str):
     
     session = None
     try:
-        # Check if port exists
         if not os.path.exists(port_path):
             await websocket.send_text(f"\r\n[Error: Port {port_path} does not exist]\r\n")
             await websocket.close()
             return
 
-        session = SerialSession(port_path, baud=9600, timeout=0.1)
+        # Fetch baud rate for this port from settings
+        baud = 9600
+        with SessionLocal() as db:
+            setting = db.query(models.Setting).filter(models.Setting.key == "port_baud_rates").first()
+            if setting and str(port_id) in setting.value:
+                baud = setting.value[str(port_id)]
+
+        session = SerialSession(port_path, baud=baud, timeout=0.1)
         try:
-            # Run connect in thread to avoid blocking if it takes time
             await asyncio.to_thread(session.connect)
         except serial.SerialException as e:
             await websocket.send_text(f"\r\n[Error: Could not open port: {str(e)}]\r\n")
@@ -68,42 +89,94 @@ async def console_websocket(websocket: WebSocket, port_id: str):
 
         await websocket.send_text(f"\r\n[Connected to {port_path}]\r\n")
 
-        # Bridge tasks
+        # Shared state for this session
+        state = {
+            "is_capturing": False,
+            "backspace_mode": "DEL" # symbolic: DEL or CTRLH
+        }
+
         async def serial_to_ws():
             try:
                 while True:
-                    # Run read in thread to avoid blocking (read_available reads 4096 bytes)
-                    # session.read_available is fast but could block slightly on I/O
-                    data = await asyncio.to_thread(session.read_available)
-                    if data:
-                        await websocket.send_text(data)
+                    if not state["is_capturing"]:
+                        # read_available uses session.lock internally
+                        data = await asyncio.to_thread(session.read_available)
+                        if data:
+                            await websocket.send_text(data)
                     await asyncio.sleep(0.01)
             except Exception:
                 pass
 
+        async def run_capture(command: str):
+            loop = asyncio.get_running_loop()
+            state["is_capturing"] = True
+            try:
+                from serial_lib.command_runner import CommandRunner
+                runner = CommandRunner(session)
+                
+                # Preliminary robustness: clear noise and disable paging
+                await asyncio.to_thread(session.drain, 0.5)
+                await asyncio.to_thread(runner.disable_paging)
+                
+                # Callback to pipe data to WebSocket while capturing
+                def on_data(chunk: str):
+                    # Use the captured main loop to safely send data from the worker thread
+                    asyncio.run_coroutine_threadsafe(websocket.send_text(chunk), loop)
+
+                output = await asyncio.to_thread(runner.run_show, command, on_data=on_data)
+                
+                # Send control messages as Binary Frames (bytes)
+                await websocket.send_bytes(json.dumps({
+                    "type": "capture_result",
+                    "command": command,
+                    "output": output
+                }).encode())
+            except Exception as e:
+                await websocket.send_bytes(json.dumps({
+                    "type": "error",
+                    "message": f"Capture failed: {str(e)}"
+                }).encode())
+            finally:
+                state["is_capturing"] = False
+
         async def ws_to_serial():
             try:
                 while True:
-                    # Receive raw bytes/text from xterm.js
-                    data = await websocket.receive_text()
-                    if data:
-                        # sending can block for 0.12s due to SerialSession.send sleep
-                        await asyncio.to_thread(session.send, data)
+                    msg = await websocket.receive_text()
+                    if not msg:
+                        continue
+                    
+                    if msg.startswith("{") and msg.endswith("}"):
+                        try:
+                            data = json.loads(msg)
+                            msg_type = data.get("type")
+                            
+                            if msg_type == "capture":
+                                cmd = data.get("command")
+                                if cmd:
+                                    asyncio.create_task(run_capture(cmd))
+                            elif msg_type == "set_backspace":
+                                state["backspace_mode"] = data.get("mode", "DEL")
+                            continue
+                        except json.JSONDecodeError:
+                            pass
+                    
+                    # Backspace Translation Mapping
+                    if msg == "\x7f": # xterm.js default
+                        if state["backspace_mode"] == "CTRLH":
+                            msg = "\x08"
+                        else:
+                            msg = "\x7f"
+                    
+                    if not state["is_capturing"]:
+                         await asyncio.to_thread(session.send, msg)
             except WebSocketDisconnect:
                 raise
             except Exception:
                 pass
         
-        # Run both concurrently
         await asyncio.gather(serial_to_ws(), ws_to_serial())
 
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        try:
-            await websocket.send_text(f"\r\n[Console Error: {str(e)}]\r\n")
-        except:
-            pass
     finally:
         if session:
             await asyncio.to_thread(session.disconnect)

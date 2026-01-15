@@ -5,6 +5,7 @@ import { Play, Upload, FileSpreadsheet } from "lucide-react";
 import api from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { parseCSV, normalizeHeaders } from "@/lib/csv-utils";
+import CSVImportModal from "@/components/CSVImportModal";
 
 type Template = { id: number; name: string; config_schema: any; };
 
@@ -12,6 +13,7 @@ export default function NewJobPage() {
     const router = useRouter();
     const [templates, setTemplates] = useState<Template[]>([]);
     const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
     // 16 ports logic
     const [ports, setPorts] = useState(
@@ -41,41 +43,31 @@ export default function NewJobPage() {
         setPorts(newPorts);
     };
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    const handleImportedData = (rows: any[]) => {
+        const newPorts = [...ports];
+        let matchCount = 0;
 
-        try {
-            const rows = await parseCSV(file);
-            const newPorts = [...ports];
-            let matchCount = 0;
+        rows.forEach(row => {
+            // Try to find port number in "port", "port_id", "id", "#"
+            const portVal = row.port || row.port_number || row.port_id || row.id || row["#"];
 
-            rows.forEach(row => {
-                const normalized = normalizeHeaders(row);
-                // Try to find port number in "port", "port_id", "id", "#"
-                const portVal = normalized.port || normalized.port_number || normalized.port_id || normalized.id || normalized["#"];
-
-                if (portVal) {
-                    const portNum = parseInt(portVal.replace(/[^0-9]/g, ""), 10);
-                    if (portNum >= 1 && portNum <= 16) {
-                        const idx = portNum - 1;
-                        newPorts[idx].enabled = true;
-                        // Merge other variables
-                        newPorts[idx].variables = { ...newPorts[idx].variables, ...normalized };
-                        matchCount++;
-                    }
+            if (portVal) {
+                const portNum = parseInt(portVal.toString().replace(/[^0-9]/g, ""), 10);
+                if (portNum >= 1 && portNum <= 16) {
+                    const idx = portNum - 1;
+                    newPorts[idx].enabled = true;
+                    // Merge other variables
+                    newPorts[idx].variables = { ...newPorts[idx].variables, ...row };
+                    matchCount++;
                 }
-            });
-
-            setPorts(newPorts);
-            if (matchCount > 0) {
-                alert(`Successfully imported configuration for ${matchCount} ports.`);
-            } else {
-                alert("No valid ports found in CSV. Ensure there is a 'Port' column with numbers 1-16.");
             }
-        } catch (err) {
-            console.error(err);
-            alert("Failed to parse CSV file.");
+        });
+
+        setPorts(newPorts);
+        if (matchCount > 0) {
+            alert(`Successfully imported configuration for ${matchCount} ports.`);
+        } else {
+            alert("No valid ports found in CSV. Ensure there is a 'Port' column with numbers 1-16.");
         }
     };
 
@@ -132,11 +124,13 @@ export default function NewJobPage() {
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white">Target Ports</h3>
                         <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 cursor-pointer text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded px-3 py-1 bg-emerald-500/10 transition-colors">
+                            <button
+                                onClick={() => setIsImportModalOpen(true)}
+                                className="flex items-center gap-2 cursor-pointer text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded px-3 py-1 bg-emerald-500/10 transition-colors"
+                            >
                                 <FileSpreadsheet className="h-3 w-3" />
                                 Import CSV
-                                <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
-                            </label>
+                            </button>
                             <button onClick={() => setPorts(ports.map(p => ({ ...p, enabled: true })))} className="text-xs text-blue-400 hover:text-blue-300">Enable All</button>
                         </div>
                     </div>
@@ -193,6 +187,14 @@ export default function NewJobPage() {
                     Queue Execution
                 </button>
             </div>
+            {selectedTemplate && (
+                <CSVImportModal
+                    isOpen={isImportModalOpen}
+                    onClose={() => setIsImportModalOpen(false)}
+                    onImport={handleImportedData}
+                    templateSchema={selectedTemplate.config_schema}
+                />
+            )}
         </div>
     );
 }

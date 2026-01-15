@@ -18,18 +18,8 @@ interface PortSelectorProps {
 }
 
 export function PortSelector({ onSelect, activeSessions }: PortSelectorProps) {
-    // Initialize with 16 "Disconnected" ports
-    const [ports, setPorts] = useState<PortStatus[]>(
-        Array.from({ length: 16 }, (_, i) => ({
-            id: i + 1,
-            path: `/dev/ttyUSB${i}`, // Placeholder path
-            connected: false,
-            busy: false,
-            locked: false,
-            responding: false
-        }))
-    );
-    const [loading, setLoading] = useState(false);
+    const [ports, setPorts] = useState<PortStatus[]>([]);
+    const [loading, setLoading] = useState(true);
 
     const fetchPorts = async () => {
         setLoading(true);
@@ -47,8 +37,9 @@ export function PortSelector({ onSelect, activeSessions }: PortSelectorProps) {
     };
 
     useEffect(() => {
-        // Initial fetch only
         fetchPorts();
+        const interval = setInterval(fetchPorts, 5000); // Poll every 5s
+        return () => clearInterval(interval);
     }, []);
 
     return (

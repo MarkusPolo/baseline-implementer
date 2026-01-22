@@ -71,30 +71,7 @@ npm install
 Nginx als Reverse Proxy einrichten:
 
 ```bash
-sudo nano /etc/nginx/sites-available/switchconfig
-```
-
-Inhalt einfügen (IP/Hostname anpassen):
-```nginx
-server {
-    listen 80;
-    server_name YOUR_PI_IP;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-    }
-
-    location /api {
-        rewrite ^/api/(.*) /$1 break;
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
+sudo cp ~/baseline-implementer/nginx/switchconfig.conf /etc/nginx/sites-available/switchconfig
 ```
 
 Aktivieren:

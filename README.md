@@ -2,9 +2,32 @@
 
 Diese Anleitung beschreibt die Ersteinrichtung des Serial Switch Configurators auf einem Raspberry Pi (Ubuntu 20.04 LTS).
 
-## 1. Repository klonen
+## 1. System Vorbereitung
 
-Zuerst das Repository von GitHub klonen:
+Zuerst das System aktualisieren und Basis-Tools installieren:
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y build-essential git curl wget redis-server nginx
+```
+
+### 1.1 Redis konfigurieren
+```bash
+sudo systemctl enable redis-server
+sudo systemctl start redis-server
+# Test: redis-cli ping (sollte PONG zurückgeben)
+```
+
+### 1.2 Node.js (NVM) installieren
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+source ~/.bashrc
+nvm install 20
+nvm use 20
+nvm alias default 20
+```
+
+## 2. Repository klonen
 
 ```bash
 cd ~
@@ -12,84 +35,97 @@ git clone https://github.com/Morgenstern/baseline-implementer.git
 cd baseline-implementer
 ```
 
-## 2. Miniconda / Miniforge Setup
+## 3. Miniconda / Miniforge Setup
 
-Da Standard-Python-Versionen auf ARM-Systemen oft Probleme bereiten, nutzen wir Miniforge.
-
-### 2.1 Miniforge installieren
+### 3.1 Miniforge installieren (für ARM64)
 ```bash
 wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh
 bash Miniforge3-Linux-aarch64.sh
-# Den Anweisungen folgen (Standardpfad ~/miniforge3, 'yes' zur Initialisierung)
 source ~/.bashrc
 ```
 
-### 2.2 Python-Umgebung erstellen
+### 3.2 Python-Umgebung erstellen
 ```bash
 conda create -n switchconfig python=3.10 -y
 conda activate switchconfig
 ```
 
-## 3. Abhängigkeiten installieren
+## 4. Abhängigkeiten & Datenbank
 
-### 3.1 Backend (Python)
-Stellen Sie sicher, dass die `switchconfig` Umgebung aktiviert ist.
-
+### 4.1 Backend (Python)
 ```bash
 pip install fastapi uvicorn sqlalchemy celery redis jinja2 pyserial
+# Datenbank initialisieren und Standardprofile laden
+python backend/seed_profiles.py
 ```
 
-### 3.2 Frontend (Node.js/JS)
-Die Build-Artefakte sind bereits im Repository enthalten. Dennoch müssen die Node-Module installiert werden, um den Server zu starten.
-
+### 4.2 Frontend (Node.js/JS)
+Build-Artefakte sind bereits enthalten, nur Abhängigkeiten installieren:
 ```bash
 cd ~/baseline-implementer/frontend
 npm install
 ```
 
-## 4. System-Services (systemd)
+## 5. Nginx Konfiguration
 
-Wir richten drei Services ein: Backend, Worker und Frontend.
+Nginx als Reverse Proxy einrichten:
 
-### 4.1 Service-Dateien kopieren
-Die Vorlagen befinden sich im Ordner `systemd/`. Kopieren Sie diese nach `/etc/systemd/system/` (Pfade in den Dateien ggf. anpassen).
+```bash
+sudo nano /etc/nginx/sites-available/switchconfig
+```
 
+Inhalt einfügen (IP/Hostname anpassen):
+```nginx
+server {
+    listen 80;
+    server_name YOUR_PI_IP;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+    }
+
+    location /api {
+        rewrite ^/api/(.*) /$1 break;
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+Aktivieren:
+```bash
+sudo ln -s /etc/nginx/sites-available/switchconfig /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+## 6. System-Services (systemd)
+
+### 6.1 Services einrichten
 ```bash
 sudo cp ~/baseline-implementer/systemd/*.service /etc/systemd/system/
-```
-
-### 4.2 Services aktivieren und starten
-```bash
 sudo systemctl daemon-reload
 
-# Aktivieren (Start beim Booten)
-sudo systemctl enable switchconfig-backend
-sudo systemctl enable switchconfig-worker
-sudo systemctl enable switchconfig-frontend
-
-# Starten
-sudo systemctl start switchconfig-backend
-sudo systemctl start switchconfig-worker
-sudo systemctl start switchconfig-frontend
+# Aktivieren und Starten
+sudo systemctl enable --now switchconfig-backend switchconfig-worker switchconfig-frontend
 ```
 
-## 5. Update-Leitfaden
-
-Um das System auf den neuesten Stand zu bringen:
+## 7. Update-Leitfaden
 
 ```bash
 cd ~/baseline-implementer
 git pull origin main
 
-# Backend & Worker neu starten
-sudo systemctl restart switchconfig-backend switchconfig-worker
-
-# Frontend (da Build bereits vorhanden ist, reicht meist ein Neustart)
-# Falls JS-Abhängigkeiten geändert wurden: cd frontend && npm install
-sudo systemctl restart switchconfig-frontend
+# Dienste neu starten
+sudo systemctl restart switchconfig-backend switchconfig-worker switchconfig-frontend
 ```
 
-## Troubleshooting
-- **Logs prüfen**: `sudo journalctl -u switchconfig-backend -f`
-- **Status prüfen**: `sudo systemctl status switchconfig-*`
-- **Serielle Ports**: Sicherstellen, dass der User in der Gruppe `dialout` ist: `sudo usermod -a -G dialout $USER` (gefolgt von einem Reboot).
+## Fehlerbehebung
+- **Berechtigungen**: `sudo usermod -a -G dialout $USER` (gefolgt von Reboot).
+- **Logs**: `sudo journalctl -u switchconfig-* -f`

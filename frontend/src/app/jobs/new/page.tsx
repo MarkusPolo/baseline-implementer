@@ -201,10 +201,10 @@ function NewJobBuilder() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-6 pb-16">
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 shadow-xl shadow-black/20">
+            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-6 shadow-sm">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                     <div className="max-w-2xl">
-                        <div className="mb-4 inline-flex items-center rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-neutral-400">
+                        <div className="mb-4 inline-flex items-center rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-neutral-300">
                             Job Run
                         </div>
                         <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">Create a configuration job</h1>
@@ -212,7 +212,7 @@ function NewJobBuilder() {
                             Pick a template visually, choose the ports, then enter the variables each device needs.
                         </p>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 rounded-xl border border-neutral-800 bg-neutral-950 p-2 text-center">
+                    <div className="grid grid-cols-3 gap-2 rounded-xl border border-neutral-800 bg-neutral-950/50 p-2 text-center">
                         <Metric label="Templates" value={templates.length.toString()} />
                         <Metric label="Ports" value={enabledPorts.length.toString()} />
                         <Metric label="Variables" value={variableKeys.length.toString()} />
@@ -221,11 +221,11 @@ function NewJobBuilder() {
             </div>
 
             <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-                <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+                <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
                     <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
                             <h2 className="text-lg font-semibold text-white">Select Template</h2>
-                            <p className="text-sm text-neutral-500">Search and choose the baseline you want to run.</p>
+                            <p className="text-sm text-neutral-400">Search and choose the baseline you want to run.</p>
                         </div>
                         <div className="relative w-full md:w-80">
                             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
@@ -234,14 +234,14 @@ function NewJobBuilder() {
                                 value={templateSearch}
                                 onChange={(e) => setTemplateSearch(e.target.value)}
                                 placeholder="Search templates..."
-                                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-10 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-neutral-500"
+                                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-10 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-blue-500"
                             />
                         </div>
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         {filteredTemplates.length === 0 ? (
-                            <div className="col-span-full rounded-xl border border-dashed border-neutral-800 bg-neutral-950 p-10 text-center text-sm text-neutral-500">
+                            <div className="col-span-full rounded-xl border border-dashed border-neutral-800 bg-neutral-950/50 p-10 text-center text-sm text-neutral-500">
                                 {templates.length === 0 ? "No templates found." : "No templates match your search."}
                             </div>
                         ) : (
@@ -254,15 +254,15 @@ function NewJobBuilder() {
                                         key={template.id}
                                         onClick={() => selectTemplate(template)}
                                         className={`group rounded-xl border p-4 text-left transition-all ${isSelected
-                                            ? "border-neutral-400 bg-neutral-800 shadow-lg shadow-black/20"
-                                            : "border-neutral-800 bg-neutral-950 hover:border-neutral-600 hover:bg-neutral-900"
+                                            ? "border-blue-500 bg-neutral-900/50 ring-1 ring-blue-500/50"
+                                            : "border-neutral-800 bg-neutral-950/50 hover:border-neutral-700 hover:bg-neutral-900/80"
                                             }`}
                                     >
                                         <div className="mb-4 flex items-start justify-between gap-3">
-                                            <div className={`flex h-10 w-10 items-center justify-center rounded-lg border ${isSelected ? "border-neutral-500 bg-neutral-700 text-white" : "border-neutral-800 bg-neutral-900 text-neutral-400 group-hover:text-white"}`}>
+                                            <div className={`flex h-10 w-10 items-center justify-center rounded-lg border ${isSelected ? "border-blue-500 bg-neutral-800 text-blue-400" : "border-neutral-800 bg-neutral-900 text-neutral-400 group-hover:text-white"}`}>
                                                 <FileText className="h-5 w-5" />
                                             </div>
-                                            {isSelected && <CheckCircle2 className="h-5 w-5 text-neutral-200" />}
+                                            {isSelected && <CheckCircle2 className="h-5 w-5 text-blue-400" />}
                                         </div>
                                         <h3 className="line-clamp-2 font-semibold text-white">{template.name}</h3>
                                         <div className="mt-4 flex items-center justify-between text-xs text-neutral-500">
@@ -276,11 +276,11 @@ function NewJobBuilder() {
                     </div>
                 </div>
 
-                <aside className="h-fit rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+                <aside className="h-fit rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
                     <div className="mb-4 flex items-start justify-between gap-4">
                         <div>
                             <h2 className="text-lg font-semibold text-white">Run Summary</h2>
-                            <p className="text-sm text-neutral-500">Current job configuration.</p>
+                            <p className="text-sm text-neutral-400">Current job configuration.</p>
                         </div>
                         {selectedTemplate && (
                             <button
@@ -300,7 +300,7 @@ function NewJobBuilder() {
                     <button
                         onClick={handleSubmit}
                         disabled={!selectedTemplate || enabledPorts.length === 0 || isSubmitting}
-                        className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-neutral-950 shadow-lg shadow-black/20 transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400 disabled:opacity-100"
+                        className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400 disabled:opacity-100"
                     >
                         <Play className="h-4 w-4" />
                         {isSubmitting ? "Queueing..." : "Queue Execution"}
@@ -309,26 +309,26 @@ function NewJobBuilder() {
             </section>
 
             {selectedTemplate && (
-                <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+                <section className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
                     <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
                             <h2 className="text-lg font-semibold text-white">Configure Target Ports</h2>
-                            <p className="text-sm text-neutral-500">
+                            <p className="text-sm text-neutral-400">
                                 Enable devices and provide per-port values for <span className="font-mono text-neutral-300">{selectedTemplate.name}</span>.
                             </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                             <button
                                 onClick={() => setIsImportModalOpen(true)}
-                                className="flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-300 transition-colors hover:border-neutral-500 hover:text-white"
+                                className="flex items-center gap-2 rounded-lg bg-neutral-800 px-3 py-2 text-xs font-semibold text-neutral-200 transition-colors hover:bg-neutral-700 border border-neutral-700"
                             >
                                 <FileSpreadsheet className="h-3.5 w-3.5" />
                                 Import CSV
                             </button>
-                            <button onClick={() => setAllPorts(true)} className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-300 transition-colors hover:border-neutral-500 hover:text-white">
+                            <button onClick={() => setAllPorts(true)} className="rounded-lg bg-neutral-800 px-3 py-2 text-xs font-semibold text-neutral-200 transition-colors hover:bg-neutral-700 border border-neutral-700">
                                 Enable All
                             </button>
-                            <button onClick={() => setAllPorts(false)} className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-400 transition-colors hover:border-neutral-600 hover:text-white">
+                            <button onClick={() => setAllPorts(false)} className="rounded-lg bg-neutral-800 px-3 py-2 text-xs font-semibold text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-white border border-neutral-700">
                                 Clear Ports
                             </button>
                         </div>
@@ -339,16 +339,16 @@ function NewJobBuilder() {
                             <div
                                 key={port.id}
                                 className={`rounded-xl border p-4 transition-all ${port.enabled
-                                    ? "border-neutral-500 bg-neutral-800/80"
-                                    : "border-neutral-800 bg-neutral-950 opacity-75 hover:opacity-100"
+                                    ? "border-blue-500 bg-neutral-900/60 ring-1 ring-blue-500/50"
+                                    : "border-neutral-800 bg-neutral-950/50 opacity-75 hover:opacity-100"
                                     }`}
                             >
                                 <div className="mb-4 flex items-center justify-between">
                                     <button
                                         onClick={() => togglePort(idx)}
                                         className={`rounded-md border px-3 py-1 text-xs font-semibold transition-colors ${port.enabled
-                                            ? "border-neutral-500 bg-neutral-700 text-white"
-                                            : "bg-neutral-800 text-neutral-400 hover:text-white"
+                                            ? "border-blue-500 bg-blue-600 text-white"
+                                            : "border-neutral-700 bg-neutral-800 text-neutral-400 hover:text-white"
                                             }`}
                                     >
                                         Port {port.id}
@@ -357,7 +357,7 @@ function NewJobBuilder() {
                                         type="checkbox"
                                         checked={port.enabled}
                                         onChange={() => togglePort(idx)}
-                                        className="h-4 w-4 accent-neutral-200"
+                                        className="h-4 w-4 accent-blue-600"
                                     />
                                 </div>
 
@@ -370,11 +370,11 @@ function NewJobBuilder() {
                                                 <div key={key}>
                                                     <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-neutral-500">
                                                         {prop.title || key}
-                                                        {selectedRequired.includes(key) && <span className="ml-1 text-neutral-300">*</span>}
+                                                        {selectedRequired.includes(key) && <span className="ml-1 text-blue-400">*</span>}
                                                     </label>
                                                     <input
                                                         type={key.toLowerCase().includes("password") ? "password" : "text"}
-                                                        className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-neutral-700 focus:border-neutral-500"
+                                                        className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-neutral-700 focus:border-blue-500"
                                                         placeholder={prop.title || key}
                                                         value={port.variables[key] || ""}
                                                         onChange={(e) => updatePortVariable(idx, key, e.target.value)}
@@ -406,7 +406,7 @@ function NewJobBuilder() {
 
 function Metric({ label, value }: { label: string; value: string }) {
     return (
-        <div className="min-w-20 rounded-xl bg-neutral-900 px-4 py-3">
+        <div className="min-w-20 rounded-lg bg-neutral-900 px-4 py-3">
             <div className="text-lg font-bold text-white">{value}</div>
             <div className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500">{label}</div>
         </div>
@@ -415,7 +415,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function SummaryRow({ label, value, active }: { label: string; value: string; active: boolean }) {
     return (
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-neutral-800 bg-neutral-950/70 px-4 py-3">
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-neutral-800 bg-neutral-950/70 px-4 py-3">
             <span className="text-neutral-500">{label}</span>
             <span className={active ? "font-semibold text-white" : "text-neutral-600"}>{value}</span>
         </div>

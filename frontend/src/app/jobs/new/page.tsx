@@ -1,26 +1,60 @@
 'use client';
 
-import { useEffect, useState } from "react";
-import { Play, Upload, FileSpreadsheet } from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle2, FileSpreadsheet, FileText, Play, Search, X } from "lucide-react";
 import api from "@/lib/api";
-import { useRouter } from "next/navigation";
-import { parseCSV, normalizeHeaders } from "@/lib/csv-utils";
 import CSVImportModal from "@/components/CSVImportModal";
 
-type Template = { id: number; name: string; config_schema: any; };
+type SchemaProperty = {
+    title?: string;
+    type?: string;
+};
+
+type ConfigSchema = {
+    properties?: Record<string, SchemaProperty>;
+    required?: string[];
+};
+
+type Template = {
+    id: number;
+    name: string;
+    created_at?: string;
+    config_schema: ConfigSchema;
+};
+
+type PortConfig = {
+    id: number;
+    enabled: boolean;
+    variables: Record<string, string>;
+};
+
+type CsvRow = Record<string, unknown>;
 
 export default function NewJobPage() {
+    return (
+        <Suspense fallback={<div className="py-12 text-center text-neutral-500">Loading job builder...</div>}>
+            <NewJobBuilder />
+        </Suspense>
+    );
+}
+
+function NewJobBuilder() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const preselectedTemplateId = Number(searchParams.get("templateId"));
+
     const [templates, setTemplates] = useState<Template[]>([]);
     const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+    const [templateSearch, setTemplateSearch] = useState("");
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // 16 ports logic
-    const [ports, setPorts] = useState(
+    const [ports, setPorts] = useState<PortConfig[]>(
         Array.from({ length: 16 }, (_, i) => ({
             id: i + 1,
             enabled: false,
-            variables: {} as Record<string, string>
+            variables: {}
         }))
     );
 
@@ -28,165 +62,336 @@ export default function NewJobPage() {
         api.get("templates/").then(res => setTemplates(res.data));
     }, []);
 
+    const selectedProperties = selectedTemplate?.config_schema?.properties || {};
+    const selectedRequired = selectedTemplate?.config_schema?.required || [];
+    const variableKeys = Object.keys(selectedProperties);
+    const enabledPorts = ports.filter(p => p.enabled);
+
+    const filteredTemplates = useMemo(() => {
+        const query = templateSearch.trim().toLowerCase();
+        return templates
+            .filter(template => template.name.toLowerCase().includes(query))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [templateSearch, templates]);
+
+    const buildEmptyVariables = useCallback((template: Template) => {
+        const initialVariables: Record<string, string> = {};
+        Object.keys(template.config_schema?.properties || {}).forEach(key => {
+            initialVariables[key] = "";
+        });
+        return initialVariables;
+    }, []);
+
+    const selectTemplate = useCallback((template: Template) => {
+        setSelectedTemplate(template);
+        setPorts(currentPorts => currentPorts.map(port => ({
+            ...port,
+            variables: buildEmptyVariables(template)
+        })));
+    }, [buildEmptyVariables]);
+
+    useEffect(() => {
+        if (!preselectedTemplateId || templates.length === 0 || selectedTemplate) return;
+
+        const template = templates.find(t => t.id === preselectedTemplateId);
+        if (template) {
+            selectTemplate(template);
+        }
+    }, [preselectedTemplateId, selectTemplate, selectedTemplate, templates]);
+
+    const clearTemplate = () => {
+        setSelectedTemplate(null);
+        setPorts(currentPorts => currentPorts.map(port => ({
+            ...port,
+            enabled: false,
+            variables: {}
+        })));
+    };
+
     const togglePort = (index: number) => {
-        const newPorts = [...ports];
-        newPorts[index].enabled = !newPorts[index].enabled;
-        setPorts(newPorts);
+        setPorts(currentPorts => currentPorts.map((port, portIndex) => (
+            portIndex === index ? { ...port, enabled: !port.enabled } : port
+        )));
+    };
+
+    const setAllPorts = (enabled: boolean) => {
+        setPorts(currentPorts => currentPorts.map(port => ({ ...port, enabled })));
     };
 
     const updatePortVariable = (portIndex: number, field: string, value: string) => {
-        const newPorts = [...ports];
-        newPorts[portIndex].variables = {
-            ...newPorts[portIndex].variables,
-            [field]: value
-        };
-        setPorts(newPorts);
+        setPorts(currentPorts => currentPorts.map((port, index) => (
+            index === portIndex
+                ? { ...port, variables: { ...port.variables, [field]: value } }
+                : port
+        )));
     };
 
-    const handleImportedData = (rows: any[]) => {
-        const newPorts = [...ports];
-        let matchCount = 0;
+    const handleImportedData = (rows: CsvRow[]) => {
+        setPorts(currentPorts => {
+            const nextPorts = [...currentPorts];
+            let matchCount = 0;
 
-        rows.forEach(row => {
-            // Try to find port number in "port", "port_id", "id", "#"
-            const portVal = row.port || row.port_number || row.port_id || row.id || row["#"];
+            rows.forEach(row => {
+                const portVal = row.port || row.port_number || row.port_id || row.id || row["#"];
 
-            if (portVal) {
-                const portNum = parseInt(portVal.toString().replace(/[^0-9]/g, ""), 10);
-                if (portNum >= 1 && portNum <= 16) {
-                    const idx = portNum - 1;
-                    newPorts[idx].enabled = true;
-                    // Merge other variables
-                    newPorts[idx].variables = { ...newPorts[idx].variables, ...row };
-                    matchCount++;
+                if (portVal) {
+                    const portNum = parseInt(String(portVal).replace(/[^0-9]/g, ""), 10);
+                    if (portNum >= 1 && portNum <= 16) {
+                        const idx = portNum - 1;
+                        const rowVariables = Object.fromEntries(
+                            Object.entries(row).map(([key, value]) => [key, value == null ? "" : String(value)])
+                        );
+
+                        nextPorts[idx] = {
+                            ...nextPorts[idx],
+                            enabled: true,
+                            variables: { ...nextPorts[idx].variables, ...rowVariables }
+                        };
+                        matchCount++;
+                    }
                 }
-            }
-        });
+            });
 
-        setPorts(newPorts);
-        if (matchCount > 0) {
-            alert(`Successfully imported configuration for ${matchCount} ports.`);
-        } else {
-            alert("No valid ports found in CSV. Ensure there is a 'Port' column with numbers 1-16.");
-        }
+            window.setTimeout(() => {
+                if (matchCount > 0) {
+                    alert(`Successfully imported configuration for ${matchCount} ports.`);
+                } else {
+                    alert("No valid ports found in CSV. Ensure there is a 'Port' column with numbers 1-16.");
+                }
+            }, 0);
+
+            return nextPorts;
+        });
     };
 
     const handleSubmit = async () => {
         if (!selectedTemplate) return;
 
-        const enabledPorts = ports.filter(p => p.enabled);
         if (enabledPorts.length === 0) {
             alert("Enable at least one port.");
             return;
         }
 
-        try {
-            const payload = {
-                template_id: selectedTemplate.id,
-                targets: enabledPorts.map(p => ({
-                    port: `~/port${p.id}`, // using user's environment convention
-                    variables: p.variables
-                }))
-            };
+        for (const port of enabledPorts) {
+            for (const requiredKey of selectedRequired) {
+                if (!port.variables[requiredKey]) {
+                    alert(`Please provide ${requiredKey} for port ${port.id}.`);
+                    return;
+                }
+            }
+        }
 
-            const res = await api.post("jobs/", payload);
+        setIsSubmitting(true);
+        try {
+            const res = await api.post("jobs/", {
+                template_id: selectedTemplate.id,
+                targets: enabledPorts.map(port => ({
+                    port: `~/port${port.id}`,
+                    variables: port.variables
+                }))
+            });
             router.push(`/jobs/${res.data.id}`);
         } catch (err) {
             alert("Failed to create job");
             console.error(err);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     return (
-        <div className="space-y-8 max-w-5xl mx-auto">
-            <div>
-                <h1 className="text-2xl font-bold text-white">New Configuration Job</h1>
-                <p className="text-neutral-400">Select a template and configure ports.</p>
+        <div className="mx-auto max-w-7xl space-y-6 pb-16">
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 shadow-xl shadow-black/20">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="max-w-2xl">
+                        <div className="mb-4 inline-flex items-center rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-neutral-400">
+                            Job Run
+                        </div>
+                        <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">Create a configuration job</h1>
+                        <p className="mt-3 text-sm leading-6 text-neutral-400">
+                            Pick a template visually, choose the ports, then enter the variables each device needs.
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 rounded-xl border border-neutral-800 bg-neutral-950 p-2 text-center">
+                        <Metric label="Templates" value={templates.length.toString()} />
+                        <Metric label="Ports" value={enabledPorts.length.toString()} />
+                        <Metric label="Variables" value={variableKeys.length.toString()} />
+                    </div>
+                </div>
             </div>
 
-            <div className="space-y-4">
-                <label className="block text-sm font-medium text-neutral-300">Select Template</label>
-                <select
-                    className="w-full max-w-md rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-white"
-                    onChange={(e) => {
-                        const t = templates.find(t => t.id === Number(e.target.value));
-                        setSelectedTemplate(t || null);
-                    }}
-                >
-                    <option value="">-- Choose Template --</option>
-                    {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-            </div>
-
-            {/* Grid of ports */}
-            {selectedTemplate && (
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-white">Target Ports</h3>
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={() => setIsImportModalOpen(true)}
-                                className="flex items-center gap-2 cursor-pointer text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded px-3 py-1 bg-emerald-500/10 transition-colors"
-                            >
-                                <FileSpreadsheet className="h-3 w-3" />
-                                Import CSV
-                            </button>
-                            <button onClick={() => setPorts(ports.map(p => ({ ...p, enabled: true })))} className="text-xs text-blue-400 hover:text-blue-300">Enable All</button>
+            <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+                    <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold text-white">Select Template</h2>
+                            <p className="text-sm text-neutral-500">Search and choose the baseline you want to run.</p>
+                        </div>
+                        <div className="relative w-full md:w-80">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+                            <input
+                                type="text"
+                                value={templateSearch}
+                                onChange={(e) => setTemplateSearch(e.target.value)}
+                                placeholder="Search templates..."
+                                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-10 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-neutral-500"
+                            />
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {ports.map((p, idx) => (
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {filteredTemplates.length === 0 ? (
+                            <div className="col-span-full rounded-xl border border-dashed border-neutral-800 bg-neutral-950 p-10 text-center text-sm text-neutral-500">
+                                {templates.length === 0 ? "No templates found." : "No templates match your search."}
+                            </div>
+                        ) : (
+                            filteredTemplates.map(template => {
+                                const isSelected = selectedTemplate?.id === template.id;
+                                const templateVarCount = Object.keys(template.config_schema?.properties || {}).length;
+
+                                return (
+                                    <button
+                                        key={template.id}
+                                        onClick={() => selectTemplate(template)}
+                                        className={`group rounded-xl border p-4 text-left transition-all ${isSelected
+                                            ? "border-neutral-400 bg-neutral-800 shadow-lg shadow-black/20"
+                                            : "border-neutral-800 bg-neutral-950 hover:border-neutral-600 hover:bg-neutral-900"
+                                            }`}
+                                    >
+                                        <div className="mb-4 flex items-start justify-between gap-3">
+                                            <div className={`flex h-10 w-10 items-center justify-center rounded-lg border ${isSelected ? "border-neutral-500 bg-neutral-700 text-white" : "border-neutral-800 bg-neutral-900 text-neutral-400 group-hover:text-white"}`}>
+                                                <FileText className="h-5 w-5" />
+                                            </div>
+                                            {isSelected && <CheckCircle2 className="h-5 w-5 text-neutral-200" />}
+                                        </div>
+                                        <h3 className="line-clamp-2 font-semibold text-white">{template.name}</h3>
+                                        <div className="mt-4 flex items-center justify-between text-xs text-neutral-500">
+                                            <span>{templateVarCount} variable{templateVarCount === 1 ? "" : "s"}</span>
+                                            <span>{template.created_at ? new Date(template.created_at).toLocaleDateString() : "Template"}</span>
+                                        </div>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+
+                <aside className="h-fit rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                        <div>
+                            <h2 className="text-lg font-semibold text-white">Run Summary</h2>
+                            <p className="text-sm text-neutral-500">Current job configuration.</p>
+                        </div>
+                        {selectedTemplate && (
+                            <button
+                                onClick={clearTemplate}
+                                className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-white"
+                                title="Clear selected template"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+                    <div className="space-y-3 text-sm">
+                        <SummaryRow label="Template" value={selectedTemplate?.name || "Not selected"} active={Boolean(selectedTemplate)} />
+                        <SummaryRow label="Target ports" value={enabledPorts.length.toString()} active={enabledPorts.length > 0} />
+                        <SummaryRow label="Variables" value={variableKeys.length.toString()} active={Boolean(selectedTemplate)} />
+                    </div>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={!selectedTemplate || enabledPorts.length === 0 || isSubmitting}
+                        className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-neutral-950 shadow-lg shadow-black/20 transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400 disabled:opacity-100"
+                    >
+                        <Play className="h-4 w-4" />
+                        {isSubmitting ? "Queueing..." : "Queue Execution"}
+                    </button>
+                </aside>
+            </section>
+
+            {selectedTemplate && (
+                <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+                    <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold text-white">Configure Target Ports</h2>
+                            <p className="text-sm text-neutral-500">
+                                Enable devices and provide per-port values for <span className="font-mono text-neutral-300">{selectedTemplate.name}</span>.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                onClick={() => setIsImportModalOpen(true)}
+                                className="flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-300 transition-colors hover:border-neutral-500 hover:text-white"
+                            >
+                                <FileSpreadsheet className="h-3.5 w-3.5" />
+                                Import CSV
+                            </button>
+                            <button onClick={() => setAllPorts(true)} className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-300 transition-colors hover:border-neutral-500 hover:text-white">
+                                Enable All
+                            </button>
+                            <button onClick={() => setAllPorts(false)} className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs font-semibold text-neutral-400 transition-colors hover:border-neutral-600 hover:text-white">
+                                Clear Ports
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        {ports.map((port, idx) => (
                             <div
-                                key={p.id}
-                                className={`rounded-lg border p-4 transition-all ${p.enabled
-                                    ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/50"
-                                    : "border-neutral-800 bg-neutral-900/50 opacity-60 hover:opacity-100"
+                                key={port.id}
+                                className={`rounded-xl border p-4 transition-all ${port.enabled
+                                    ? "border-neutral-500 bg-neutral-800/80"
+                                    : "border-neutral-800 bg-neutral-950 opacity-75 hover:opacity-100"
                                     }`}
                             >
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="font-mono text-sm font-bold text-neutral-300">Port {p.id}</span>
+                                <div className="mb-4 flex items-center justify-between">
+                                    <button
+                                        onClick={() => togglePort(idx)}
+                                        className={`rounded-md border px-3 py-1 text-xs font-semibold transition-colors ${port.enabled
+                                            ? "border-neutral-500 bg-neutral-700 text-white"
+                                            : "bg-neutral-800 text-neutral-400 hover:text-white"
+                                            }`}
+                                    >
+                                        Port {port.id}
+                                    </button>
                                     <input
                                         type="checkbox"
-                                        checked={p.enabled}
+                                        checked={port.enabled}
                                         onChange={() => togglePort(idx)}
-                                        className="accent-blue-600 h-4 w-4"
+                                        className="h-4 w-4 accent-neutral-200"
                                     />
                                 </div>
 
-                                {p.enabled && (
-                                    <div className="space-y-2">
-                                        {/* Render inputs based on JSON Schema properties */}
-                                        {Object.entries(selectedTemplate.config_schema.properties || {}).map(([key, prop]: [string, any]) => (
-                                            <div key={key}>
-                                                <label className="block text-[10px] uppercase tracking-wider text-neutral-500">{prop.title || key}</label>
-                                                <input
-                                                    type="text"
-                                                    className="w-full rounded bg-neutral-950 border border-neutral-700 px-2 py-1 text-xs text-white"
-                                                    placeholder={prop.title || key}
-                                                    value={p.variables[key] || ""}
-                                                    onChange={(e) => updatePortVariable(idx, key, e.target.value)}
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
+                                {port.enabled ? (
+                                    variableKeys.length === 0 ? (
+                                        <p className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-500">No variables required for this template.</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {Object.entries(selectedProperties).map(([key, prop]) => (
+                                                <div key={key}>
+                                                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                                                        {prop.title || key}
+                                                        {selectedRequired.includes(key) && <span className="ml-1 text-neutral-300">*</span>}
+                                                    </label>
+                                                    <input
+                                                        type={key.toLowerCase().includes("password") ? "password" : "text"}
+                                                        className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-neutral-700 focus:border-neutral-500"
+                                                        placeholder={prop.title || key}
+                                                        value={port.variables[key] || ""}
+                                                        onChange={(e) => updatePortVariable(idx, key, e.target.value)}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )
+                                ) : (
+                                    <p className="text-xs text-neutral-600">Enable this port to configure variables.</p>
                                 )}
                             </div>
                         ))}
                     </div>
-                </div>
+                </section>
             )}
 
-            <div className="flex justify-end pt-4 border-t border-neutral-800">
-                <button
-                    onClick={handleSubmit}
-                    disabled={!selectedTemplate}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/20"
-                >
-                    <Play className="h-4 w-4" />
-                    Queue Execution
-                </button>
-            </div>
             {selectedTemplate && (
                 <CSVImportModal
                     isOpen={isImportModalOpen}
@@ -199,3 +404,20 @@ export default function NewJobPage() {
     );
 }
 
+function Metric({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="min-w-20 rounded-xl bg-neutral-900 px-4 py-3">
+            <div className="text-lg font-bold text-white">{value}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500">{label}</div>
+        </div>
+    );
+}
+
+function SummaryRow({ label, value, active }: { label: string; value: string; active: boolean }) {
+    return (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-neutral-800 bg-neutral-950/70 px-4 py-3">
+            <span className="text-neutral-500">{label}</span>
+            <span className={active ? "font-semibold text-white" : "text-neutral-600"}>{value}</span>
+        </div>
+    );
+}

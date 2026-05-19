@@ -1,8 +1,8 @@
 'use client';
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { FileText, Plus } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { FileText, Play, Plus } from "lucide-react";
 import api from "@/lib/api";
 
 type Template = {
@@ -17,16 +17,16 @@ export default function TemplatesPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [sortBy, setSortBy] = useState<"name" | "date">("date");
 
-    useEffect(() => {
-        fetchTemplates();
-    }, []);
-
-    const fetchTemplates = () => {
+    const fetchTemplates = useCallback(() => {
         api.get("templates/")
             .then((res) => setTemplates(res.data))
             .catch((err) => console.error(err))
             .finally(() => setLoading(false));
-    };
+    }, []);
+
+    useEffect(() => {
+        fetchTemplates();
+    }, [fetchTemplates]);
 
     const handleDelete = async (e: React.MouseEvent, id: number) => {
         e.preventDefault();
@@ -114,6 +114,13 @@ export default function TemplatesPage() {
                             <p className="text-xs text-neutral-500 mt-1">
                                 Created: {new Date(t.created_at).toLocaleDateString()}
                             </p>
+                            <Link
+                                href={`/jobs/new?templateId=${t.id}`}
+                                className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-950/30 transition-colors hover:bg-emerald-500"
+                            >
+                                <Play className="h-4 w-4" />
+                                Run Template
+                            </Link>
                         </div>
                     ))
                 )}

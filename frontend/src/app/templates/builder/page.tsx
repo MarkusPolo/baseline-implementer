@@ -16,9 +16,12 @@ import {
     Code
 } from 'lucide-react';
 import api from '@/lib/api';
-import { clsx } from 'clsx';
 
 type StepType = 'command' | 'verify' | 'priv_mode' | 'config_mode' | 'exit_config' | 'authenticate';
+type StoredStep = Omit<Partial<Step>, 'type'> & {
+    type: StepType | 'send';
+    cmd?: string;
+};
 
 interface Step {
     id: string;
@@ -59,7 +62,7 @@ function TemplateBuilder() {
                     const data = res.data;
                     setName(data.name);
                     // Add frontend IDs to steps and normalize data
-                    const stepsWithIds = (data.steps || []).map((s: any) => {
+                    const stepsWithIds = (data.steps || []).map((s: StoredStep) => {
                         let type = s.type;
                         let content = s.content;
                         let command = s.command;
@@ -107,7 +110,13 @@ function TemplateBuilder() {
 
         steps.forEach(step => {
             let match;
-            const textToSearch = `${step.content || ''} ${step.pattern || ''} ${step.command || ''}`;
+            const textToSearch = [
+                step.content,
+                step.pattern,
+                step.command,
+                step.username,
+                step.password
+            ].filter(Boolean).join(' ');
             while ((match = regex.exec(textToSearch)) !== null) {
                 vars.add(match[1]);
             }
@@ -175,7 +184,9 @@ function TemplateBuilder() {
                 name,
                 is_baseline: 0,
                 profile_id: null,
-                steps: steps.map(({ id, ...rest }) => rest), // Remove UI-only ID
+                steps: steps.map((step) => Object.fromEntries(
+                    Object.entries(step).filter(([key]) => key !== 'id')
+                )), // Remove UI-only ID
                 config_schema,
                 body: '', // Empty body as we use steps now
             };
@@ -325,7 +336,7 @@ function TemplateBuilder() {
                                                 <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">Check Type</label>
                                                 <select
                                                     value={step.check_type}
-                                                    onChange={(e) => updateStep(step.id, { check_type: e.target.value as any })}
+                                                    onChange={(e) => updateStep(step.id, { check_type: e.target.value as Step['check_type'] })}
                                                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
                                                 >
                                                     <option value="regex_match">Regex Match</option>

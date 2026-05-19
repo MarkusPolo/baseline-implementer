@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Play, ArrowLeft, AlertCircle, Loader2, Info } from "lucide-react";
 import Link from "next/link";
@@ -9,9 +9,14 @@ interface Macro {
     id: number;
     name: string;
     description: string;
-    steps: any[];
-    config_schema?: any;
+    steps: unknown[];
+    config_schema?: ConfigSchema;
 }
+
+type ConfigSchema = {
+    properties?: Record<string, { title?: string }>;
+    required?: string[];
+};
 
 export default function DeployMacroPage() {
     const params = useParams();
@@ -20,33 +25,34 @@ export default function DeployMacroPage() {
 
     const [macro, setMacro] = useState<Macro | null>(null);
     const [selectedPorts, setSelectedPorts] = useState<string[]>([]);
-    const [variables, setVariables] = useState<Record<string, string>>({});
+    const [portVariables, setPortVariables] = useState<Record<string, Record<string, string>>>({});
     const [isDeploying, setIsDeploying] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        fetchMacro();
-    }, [macroId]);
-
-    const fetchMacro = async () => {
+    const fetchMacro = useCallback(async () => {
         try {
             const response = await fetch(`/api/macros/${macroId}`);
             const data = await response.json();
             setMacro(data);
 
-            // Initialize variables from schema
-            if (data.config_schema?.properties) {
-                const initialVars: Record<string, string> = {};
-                Object.keys(data.config_schema.properties).forEach(key => {
-                    initialVars[key] = "";
-                });
-                setVariables(initialVars);
-            }
+            setPortVariables({});
         } catch (error) {
             console.error("Failed to fetch macro:", error);
         } finally {
             setLoading(false);
         }
+    }, [macroId]);
+
+    useEffect(() => {
+        fetchMacro();
+    }, [fetchMacro]);
+
+    const getEmptyVariables = (schema = macro?.config_schema) => {
+        const initialVars: Record<string, string> = {};
+        Object.keys(schema?.properties || {}).forEach(key => {
+            initialVars[key] = "";
+        });
+        return initialVars;
     };
 
     const togglePort = (port: string) => {
@@ -54,11 +60,21 @@ export default function DeployMacroPage() {
             setSelectedPorts(selectedPorts.filter(p => p !== port));
         } else {
             setSelectedPorts([...selectedPorts, port]);
+            setPortVariables(prev => ({
+                ...prev,
+                [port]: prev[port] || getEmptyVariables()
+            }));
         }
     };
 
-    const handleVarChange = (key: string, value: string) => {
-        setVariables(prev => ({ ...prev, [key]: value }));
+    const handleVarChange = (port: string, key: string, value: string) => {
+        setPortVariables(prev => ({
+            ...prev,
+            [port]: {
+                ...(prev[port] || getEmptyVariables()),
+                [key]: value
+            }
+        }));
     };
 
     const handleDeploy = async () => {
@@ -69,10 +85,12 @@ export default function DeployMacroPage() {
 
         // Basic validation
         if (macro?.config_schema?.required) {
-            for (const req of macro.config_schema.required) {
-                if (!variables[req]) {
-                    alert(`Please provide a value for ${req}`);
-                    return;
+            for (const port of selectedPorts) {
+                for (const req of macro.config_schema.required) {
+                    if (!portVariables[port]?.[req]) {
+                        alert(`Please provide a value for ${req} on port ${port}`);
+                        return;
+                    }
                 }
             }
         }
@@ -86,7 +104,7 @@ export default function DeployMacroPage() {
                     macro_id: parseInt(macroId as string),
                     targets: selectedPorts.map(p => ({
                         port: `~/port${p}`,
-                        variables: variables
+                        variables: portVariables[p] || getEmptyVariables()
                     }))
                 }),
             });
@@ -97,7 +115,7 @@ export default function DeployMacroPage() {
                 const err = await response.json();
                 alert(`Deployment failed: ${JSON.stringify(err.detail)}`);
             }
-        } catch (error) {
+        } catch {
             alert("Failed to create job. Is the backend running?");
         } finally {
             setIsDeploying(false);
@@ -137,7 +155,7 @@ export default function DeployMacroPage() {
                         <div className="space-y-1">
                             <p className="text-xl font-bold text-white">{macro.name}</p>
                             <p className="text-sm text-neutral-500 leading-relaxed italic">
-                                "{macro.description || "No description provided."}"
+                                {macro.description || "No description provided."}
                             </p>
                         </div>
                     </div>
@@ -148,22 +166,31 @@ export default function DeployMacroPage() {
                                 <h3 className="text-sm font-semibold text-white">Variables</h3>
                                 <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-widest font-bold">Required</span>
                             </div>
-                            <p className="text-xs text-neutral-500 mb-4">Values provided here will replace `{"{{var}}"}` tags in the macro steps.</p>
+                            <p className="text-xs text-neutral-500 mb-4">Each selected port can use its own values for `{"{{var}}"}` tags, including auth credentials.</p>
 
-                            <div className="space-y-4">
-                                {Object.entries(macro.config_schema.properties).map(([key, prop]: [string, any]) => (
-                                    <div key={key} className="space-y-1.5">
-                                        <label className="text-xs font-medium text-neutral-400">{prop.title || key}</label>
-                                        <input
-                                            type="text"
-                                            value={variables[key]}
-                                            onChange={(e) => handleVarChange(key, e.target.value)}
-                                            placeholder={`Enter ${key}...`}
-                                            className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                                        />
-                                    </div>
-                                ))}
-                            </div>
+                            {selectedPorts.length === 0 ? (
+                                <p className="text-xs text-neutral-600 italic">Select one or more target ports to enter variables.</p>
+                            ) : (
+                                <div className="space-y-4 max-h-[520px] overflow-auto pr-1">
+                                    {selectedPorts.map(port => (
+                                        <div key={port} className="rounded-lg border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
+                                            <h4 className="text-xs font-bold uppercase tracking-widest text-neutral-400">Port {port}</h4>
+                                            {Object.entries(macro.config_schema?.properties || {}).map(([key, prop]) => (
+                                                <div key={key} className="space-y-1.5">
+                                                    <label className="text-xs font-medium text-neutral-400">{prop.title || key}</label>
+                                                    <input
+                                                        type={key.toLowerCase().includes("password") ? "password" : "text"}
+                                                        value={portVariables[port]?.[key] || ""}
+                                                        onChange={(e) => handleVarChange(port, key, e.target.value)}
+                                                        placeholder={`Enter ${key}...`}
+                                                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 

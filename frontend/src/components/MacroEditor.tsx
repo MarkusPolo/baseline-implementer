@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Trash2, GripVertical, Plus, Save, ArrowLeft, Wand2, Shield, Eye, Terminal as TermIcon } from "lucide-react";
+import { Trash2, Plus, Save, ArrowLeft, Wand2, Shield, Terminal as TermIcon } from "lucide-react";
 
 interface MacroStep {
     type: string; // send, expect, verify
@@ -13,11 +13,17 @@ interface MacroStep {
     password?: string; // for authenticate
 }
 
+type MacroSchema = {
+    type: "object";
+    properties: Record<string, { type: "string"; title: string }>;
+    required: string[];
+};
+
 interface MacroEditorProps {
     initialSteps: string[] | MacroStep[];
     initialName?: string;
     initialDescription?: string;
-    onSave: (name: string, description: string, steps: MacroStep[], schema: any) => void;
+    onSave: (name: string, description: string, steps: MacroStep[], schema: MacroSchema) => void;
     onCancel: () => void;
 }
 
@@ -31,7 +37,14 @@ export function MacroEditor({ initialSteps, initialName = "", initialDescription
         if (typeof steps[0] === 'string') {
             return (steps as string[]).map(cmd => ({ type: "send", cmd, wait_prompt: true }));
         }
-        return steps as MacroStep[];
+        return (steps as MacroStep[]).map(step => {
+            if (step.type !== "authenticate") return step;
+            return {
+                ...step,
+                username: step.username || "{{username}}",
+                password: step.password || "{{password}}"
+            };
+        });
     };
 
     const [steps, setSteps] = useState<MacroStep[]>(normalizeSteps(initialSteps));
@@ -60,14 +73,20 @@ export function MacroEditor({ initialSteps, initialName = "", initialDescription
     const generateSchema = (currentSteps: MacroStep[]) => {
         const vars = new Set<string>();
         currentSteps.forEach(step => {
-            const content = step.cmd + (step.pattern || "") + (step.response || "");
+            const content = [
+                step.cmd,
+                step.pattern,
+                step.response,
+                step.username,
+                step.password
+            ].filter(Boolean).join("");
             const matches = content.match(/\{\{([^}]+)\}\}/g);
             if (matches) {
                 matches.forEach(m => vars.add(m.replace(/\{\{|\}\}/g, "").trim()));
             }
         });
 
-        const schema: any = { type: "object", properties: {}, required: [] };
+        const schema: MacroSchema = { type: "object", properties: {}, required: [] };
         vars.forEach(v => {
             schema.properties[v] = { type: "string", title: v };
             schema.required.push(v);
@@ -104,9 +123,22 @@ export function MacroEditor({ initialSteps, initialName = "", initialDescription
         setSteps([...steps, { type: "send", cmd: "", wait_prompt: true }]);
     };
 
-    const updateStep = (index: number, field: keyof MacroStep, value: any) => {
+    const updateStep = (index: number, field: keyof MacroStep, value: MacroStep[keyof MacroStep]) => {
         const newSteps = [...steps];
         newSteps[index] = { ...newSteps[index], [field]: value };
+        setSteps(newSteps);
+    };
+
+    const updateStepType = (index: number, type: string) => {
+        const newSteps = [...steps];
+        const nextStep = { ...newSteps[index], type };
+
+        if (type === "authenticate") {
+            nextStep.username = nextStep.username || "{{username}}";
+            nextStep.password = nextStep.password || "{{password}}";
+        }
+
+        newSteps[index] = nextStep;
         setSteps(newSteps);
     };
 
@@ -237,7 +269,7 @@ export function MacroEditor({ initialSteps, initialName = "", initialDescription
                                         </div>
                                         <select
                                             value={step.type}
-                                            onChange={(e) => updateStep(i, "type", e.target.value)}
+                                            onChange={(e) => updateStepType(i, e.target.value)}
                                             className="bg-neutral-800 border-none rounded px-2 py-1 text-xs text-neutral-300 focus:ring-1 focus:ring-blue-500"
                                         >
                                             <option value="send">Send Command</option>
@@ -337,20 +369,20 @@ export function MacroEditor({ initialSteps, initialName = "", initialDescription
                                                 <label className="text-[10px] uppercase font-bold text-neutral-600 tracking-widest pl-1">Username</label>
                                                 <input
                                                     type="text"
-                                                    value={step.username || "{{username}}"}
+                                                    value={step.username || ""}
                                                     onChange={(e) => updateStep(i, "username", e.target.value)}
                                                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500/30 font-mono"
-                                                    placeholder="Username prompt response..."
+                                                    placeholder="{{username}}"
                                                 />
                                             </div>
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] uppercase font-bold text-neutral-600 tracking-widest pl-1">Password</label>
                                                 <input
                                                     type="text"
-                                                    value={step.password || "{{password}}"}
+                                                    value={step.password || ""}
                                                     onChange={(e) => updateStep(i, "password", e.target.value)}
                                                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500/30 font-mono"
-                                                    placeholder="Password prompt response..."
+                                                    placeholder="{{password}}"
                                                 />
                                             </div>
                                         </div>

@@ -156,12 +156,12 @@ class CommandRunner:
                 
                 # Try to clean up the pager prompt from the buffer
                 # This makes the final output cleaner
-                matches = list(self.detector.PROMPT_PAGINATION.finditer(full_output))
+                matches = list(self.detector.PROMPT_PAGINATION.finditer(normalized))
                 if matches:
                     last_match = matches[-1]
                     # Only remove if it's within the last chunk-ish to avoid data loss
-                    if last_match.start() > len(full_output) - 128:
-                        full_output = full_output[:last_match.start()]
+                    if last_match.start() > len(normalized) - 128:
+                        full_output = normalized[:last_match.start()]
                 
                 time.sleep(0.2) # Wait for device to react
                 continue 
@@ -228,11 +228,11 @@ class CommandRunner:
                 self.session.send(" ")
                 
                 # Cleanup pager prompt
-                matches = list(self.detector.PROMPT_PAGINATION.finditer(full_output))
+                matches = list(self.detector.PROMPT_PAGINATION.finditer(normalized))
                 if matches:
                     last_match = matches[-1]
-                    if last_match.start() > len(full_output) - 128:
-                        full_output = full_output[:last_match.start()]
+                    if last_match.start() > len(normalized) - 128:
+                        full_output = normalized[:last_match.start()]
                 
                 time.sleep(0.2)
                 continue

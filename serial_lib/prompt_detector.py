@@ -23,7 +23,7 @@ class PromptDetector:
         "any": r".*?[>#]\s*\Z",
         "username": r"(?:[Ll]ogin|[Uu]sername|[Uu]ser [Nn]ame|[Uu]ser|[Uu]ser-[Nn]ame)\s*:\s*\Z",
         "password": r"(?:[Pp]assword|[Pp]asswd|[Pp]ass)\s*:\s*\Z",
-        "pagination": r"\s*--\s*more\s*--|^\s*more\s*:|press\s+any\s+key|press\s+enter|hit\s+any\s+key|q\s*=\s*quit|space\s*bar\s*to\s+continue|next\s+page|\[\s*more\s*\]"
+        "pagination": r"-+\s*more\s*-+\s*(?:\([^)]*\)?)?|^\s*more\s*:|press\s+any\s+key|press\s+enter|hit\s+any\s+key|q\s*=\s*quit|space\s*bar\s*to\s+continue|next\s+page|\[\s*more\s*\]"
     }
     
     def __init__(self, patterns: Optional[Dict[str, str]] = None):
@@ -59,6 +59,7 @@ class PromptDetector:
         """
         # Strip ANSI escape sequences
         text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
+        text = re.sub(r'\x1b[@-_][0-?]*[ -/]*[@-~]', '', text)
         
         # Handle backspaces (repeatedly apply to handle multiple backspaces)
         while '\x08' in text:
@@ -70,6 +71,10 @@ class PromptDetector:
 
         # Normalize CRLF to LF
         text = text.replace('\r\n', '\n').replace('\r', '\n')
+
+        # Remove remaining non-printing control characters while preserving
+        # newlines and tabs. Some serial CLIs decorate pager prompts with these.
+        text = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]', '', text)
         
         return text
 

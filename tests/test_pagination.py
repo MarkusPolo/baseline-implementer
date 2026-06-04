@@ -56,5 +56,53 @@ def test_pagination_handling():
     
     print("\nTest PASSED!")
 
+def test_extreme_more_prompt_with_suffix():
+    session = MagicMock()
+    outputs = [
+        "# IP REDISTRIBUTION CONFIGURATION - VRF #\n--More-- (",
+        "# IPVPN CONFIGURATION #\n--More-- (",
+        "# APPLICATION TELEMETRY CONFIGURATION #\n5520-24X-FabricEngine# "
+    ]
+
+    def read_side_effect():
+        if not outputs:
+            return ""
+        return outputs.pop(0)
+
+    session.read_available.side_effect = read_side_effect
+    runner = CommandRunner(session)
+
+    result = runner.run_show("show run", timeout=5.0)
+
+    assert "--More--" not in result
+    assert "IPVPN CONFIGURATION" in result
+    assert "5520-24X-FabricEngine#" in result
+    space_calls = [call for call in session.send.call_args_list if call.args[0] == " "]
+    assert len(space_calls) == 2
+
+def test_more_prompt_with_control_characters():
+    session = MagicMock()
+    outputs = [
+        "first page\n\x1b[7m--More--\x1b[0m (\x07",
+        "second page\nSwitch# "
+    ]
+
+    def read_side_effect():
+        if not outputs:
+            return ""
+        return outputs.pop(0)
+
+    session.read_available.side_effect = read_side_effect
+    runner = CommandRunner(session)
+
+    result = runner.run_show("show run", timeout=5.0)
+
+    assert "--More--" not in result
+    assert "first page" in result
+    assert "second page" in result
+    assert session.send.call_args_list[0].args[0] == " "
+
 if __name__ == "__main__":
     test_pagination_handling()
+    test_extreme_more_prompt_with_suffix()
+    test_more_prompt_with_control_characters()

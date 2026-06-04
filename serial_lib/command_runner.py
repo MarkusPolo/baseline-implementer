@@ -127,18 +127,25 @@ class CommandRunner:
         """
         Execute a show command and handle pagination prompts automatically.
         Prioritizes pager detection over final prompt detection.
+        Timeout is treated as an idle timeout; long commands may run longer
+        while output is still arriving, up to a conservative hard cap.
         """
         self.session.send_line(cmd)
         
         full_output = ""
-        end_time = time.monotonic() + timeout
+        start_time = time.monotonic()
+        last_activity = start_time
+        hard_timeout = max(timeout * 5, timeout + 120.0)
         
-        while time.monotonic() < end_time:
+        while time.monotonic() - start_time < hard_timeout:
             chunk = self.session.read_available()
             if not chunk:
+                if time.monotonic() - last_activity >= timeout:
+                    break
                 time.sleep(0.1)
                 continue
             
+            last_activity = time.monotonic()
             if on_data:
                 on_data(chunk)
 
@@ -166,11 +173,16 @@ class CommandRunner:
                 time.sleep(0.2) # Wait for device to react
                 continue 
             
-            # 2. Check for final prompt only if no pager was detected
-            if self.detector.PROMPT_PRIV.search(normalized[-256:]):
+            # 2. Check for final exec prompt only if no pager was detected.
+            # Verification commands may run from user exec mode on Cisco (">").
+            if self.detector.PROMPT_ANY.search(normalized[-256:]):
                 return self.detector.normalize(full_output)
                 
-        raise TimeoutError(f"Timed out waiting for final prompt after '{cmd}'.\nLast output seen:\n{full_output[-500:]}")
+        raise TimeoutError(
+            f"Timed out waiting for final prompt after '{cmd}' "
+            f"(no output for {timeout:.0f}s or hard cap {hard_timeout:.0f}s reached).\n"
+            f"Last output seen:\n{full_output[-500:]}"
+        )
 
     def enter_config_mode(self, custom_command: Optional[str] = None):
         self.ensure_priv_exec()

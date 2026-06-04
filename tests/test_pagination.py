@@ -102,7 +102,60 @@ def test_more_prompt_with_control_characters():
     assert "second page" in result
     assert session.send.call_args_list[0].args[0] == " "
 
+def test_show_command_accepts_user_exec_prompt():
+    session = MagicMock()
+    outputs = [
+        "GigabitEthernet1 is up\n  5 minute input rate 0 bits/sec\nSwitch> "
+    ]
+
+    def read_side_effect():
+        if not outputs:
+            return ""
+        return outputs.pop(0)
+
+    session.read_available.side_effect = read_side_effect
+    runner = CommandRunner(session)
+
+    result = runner.run_show("show int", timeout=5.0)
+
+    assert "GigabitEthernet1 is up" in result
+    assert "Switch>" in result
+
+def test_show_command_timeout_extends_while_output_arrives(monkeypatch):
+    session = MagicMock()
+    outputs = [
+        "first chunk\n",
+        "",
+        "second chunk\n",
+        "Switch# "
+    ]
+    current_time = {"value": 0.0}
+
+    def fake_monotonic():
+        return current_time["value"]
+
+    def fake_sleep(seconds):
+        current_time["value"] += seconds
+
+    def read_side_effect():
+        current_time["value"] += 0.7
+        if not outputs:
+            return ""
+        return outputs.pop(0)
+
+    monkeypatch.setattr(time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+    session.read_available.side_effect = read_side_effect
+    runner = CommandRunner(session)
+
+    result = runner.run_show("show int", timeout=1.0)
+
+    assert "first chunk" in result
+    assert "second chunk" in result
+    assert "Switch#" in result
+
 if __name__ == "__main__":
     test_pagination_handling()
     test_extreme_more_prompt_with_suffix()
     test_more_prompt_with_control_characters()
+    test_show_command_accepts_user_exec_prompt()

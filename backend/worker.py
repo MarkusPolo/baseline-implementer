@@ -375,11 +375,15 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                         initialize_paging()
                         cmd_template = step.get("cmd", step.get("content", ""))
                         rendered_cmd = env.from_string(cmd_template).render(**target.variables)
+                        if not rendered_cmd.strip():
+                            log("Skipping empty command step.")
+                            continue
+                        log(f"Sending: {rendered_cmd}")
                         session.send_line(rendered_cmd)
                         # Wait for prompt after command if specified
                         if step.get("wait_prompt", True):
                             out = runner.wait_for_prompt()
-                            log(f"Sent: {rendered_cmd}")
+                            log(f"Prompt received after: {rendered_cmd}")
                             # Check for errors in output
                             error_msg = runner.check_for_errors(out)
                             if error_msg:

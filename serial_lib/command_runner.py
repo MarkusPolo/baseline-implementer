@@ -203,7 +203,8 @@ class CommandRunner:
         """
         try:
             self.session.send_line("terminal length 0")
-            self.wait_for_prompt(timeout=3.0)
+            time.sleep(0.2)
+            self.session.drain(0.8)
         except Exception:
              # If terminal length 0 is not supported, we just drain and continue.
              # Dynamic pagination will handle the rest during command execution.

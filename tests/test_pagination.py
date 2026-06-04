@@ -154,8 +154,19 @@ def test_show_command_timeout_extends_while_output_arrives(monkeypatch):
     assert "second chunk" in result
     assert "Switch#" in result
 
+def test_disable_paging_does_not_wait_for_prompt():
+    session = MagicMock()
+    runner = CommandRunner(session)
+    runner.wait_for_prompt = MagicMock(side_effect=AssertionError("should not block"))
+
+    runner.disable_paging()
+
+    session.send_line.assert_called_once_with("terminal length 0")
+    session.drain.assert_called_once()
+
 if __name__ == "__main__":
     test_pagination_handling()
     test_extreme_more_prompt_with_suffix()
     test_more_prompt_with_control_characters()
     test_show_command_accepts_user_exec_prompt()
+    test_disable_paging_does_not_wait_for_prompt()

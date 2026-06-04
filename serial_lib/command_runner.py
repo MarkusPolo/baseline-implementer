@@ -63,21 +63,30 @@ class CommandRunner:
         # Unknown prompt style
         raise RuntimeError(f"Could not determine prompt state. Buffer tail:\n{buf[-400:]}")
 
-    def authenticate(self, username: Optional[str] = None, password: Optional[str] = None, timeout: float = 30.0):
+    def authenticate(
+        self,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        timeout: float = 30.0,
+        initial_buffer: str = "",
+    ):
         """
         Robustly handle initial login if the device presents a username or password prompt.
         If already at a prompt, does nothing.
         """
-        # First, try to get ANY prompt or login-related string
-        buf = ""
+        # First, consume anything already printed by the device. This matters for
+        # consoles that are already sitting at Password:/Login:, where sending a
+        # blank wake-up line would be interpreted as an empty credential.
+        buf = initial_buffer + self.session.read_available()
         end_time = time.monotonic() + 10.0
         while time.monotonic() < end_time:
+            normalized = self.detector.normalize(buf)
+            if self.detector.PROMPT_USER_PWD_OR_LOGIN.search(normalized):
+                break
+
             self.session.send_line("")
             time.sleep(0.5)
-            chunk = self.session.read_available()
-            buf += chunk
-            if self.detector.PROMPT_USER_PWD_OR_LOGIN.search(buf):
-                break
+            buf += self.session.read_available()
         
         # Now handle the state machine
         end_time = time.monotonic() + timeout

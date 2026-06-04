@@ -8,25 +8,18 @@ class MockSerial:
         self.responses = responses
         self.sent = []
         self.idx = 0
-    
+        self.available = True
+
     def write(self, data: bytes):
         val = data.decode().strip()
         self.sent.append(val)
         print(f"MockSerial: Received '{val}'")
-        # Trigger next response after write, but only for non-empty commands 
-        # (or specifically handle the initial wake-up)
         if val and self.idx < len(self.responses) - 1:
             self.idx += 1
             self.available = True
-    
+
     def flush(self):
         pass
-        
-    def __init__(self, responses: List[str]):
-        self.responses = responses
-        self.sent = []
-        self.idx = 0
-        self.available = True
 
     def read(self, size: int) -> bytes:
         if self.available and self.idx < len(self.responses):
@@ -125,7 +118,48 @@ def test_priv_exec_with_password():
     assert "enablepwd" in mock_ser.sent
     print("En and Password sent correct.")
 
+def test_auth_uses_initial_password_prompt_without_blank_wakeup():
+    print("\n--- Testing Initial Password Prompt Does Not Receive Blank Wake-Up ---")
+    mock_ser = MockSerial([
+        "Password:",
+        "5520-24X-FabricEngine#"
+    ])
+    mock_ser.available = False
+    session = MockSession(mock_ser)
+    runner = CommandRunner(session)
+
+    runner.authenticate(username="admin", password="password123", initial_buffer="Password:")
+
+    assert mock_ser.sent == ["password123"]
+    print("Initial password prompt consumed without blank line.")
+
+def test_extreme_access_denied_then_login_sequence():
+    print("\n--- Testing Extreme Access-Denied Transcript Then Login ---")
+    transcript = (
+        "Password: \n"
+        "Login: 1 2026-06-04T05:21:49.066Z 5520-24X-FabricEngine CP1 - "
+        "0x00030586 - 00000000 GlobalRouter SW ERROR Access denied : length 0 not allowed\n"
+        "1 2026-06-04T05:21:49.066Z 5520-24X-FabricEngine CP1 - 0x001985a0 - "
+        "00000000 GlobalRouter ACLI WARNING Blocked unauthorized ACLI access for user  from console port\n\n"
+        "Login:"
+    )
+    mock_ser = MockSerial([
+        "",
+        "Password:",
+        "5520-24X-FabricEngine#"
+    ])
+    mock_ser.available = False
+    session = MockSession(mock_ser)
+    runner = CommandRunner(session)
+
+    runner.authenticate(username="admin", password="password123", initial_buffer=transcript)
+
+    assert mock_ser.sent == ["admin", "password123"]
+    print("Recovered from Extreme access-denied banner and authenticated.")
+
 if __name__ == "__main__":
     test_auth_sequence()
     test_already_authenticated()
     test_priv_exec_with_password()
+    test_auth_uses_initial_password_prompt_without_blank_wakeup()
+    test_extreme_access_denied_then_login_sequence()

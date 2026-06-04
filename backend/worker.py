@@ -343,12 +343,18 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
 
         with SerialSession(port_path, baud=baud) as session:
             # Clear noise and wake up
-            session.drain(0.5)
+            initial_buffer = session.drain(0.5)
             runner = CommandRunner(session, prompt_patterns)
             
-            # Disable paging (best-effort; dynamic detection handles it if it fails)
-            runner.disable_paging()
-            log("Interactive pagination handler active.")
+            paging_initialized = False
+
+            def initialize_paging():
+                nonlocal paging_initialized
+                if paging_initialized:
+                    return
+                runner.disable_paging()
+                paging_initialized = True
+                log("Interactive pagination handler active.")
             
             # 3. Execute Steps (New Logic) or Template Body (Old Logic)
             active_steps = macro_steps or (target.job.template.steps if target.job.template else None)
@@ -366,6 +372,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                     log(f"Step {i+1}: {step_type}")
                     
                     if step_type in ["send", "command"]:
+                        initialize_paging()
                         cmd_template = step.get("cmd", step.get("content", ""))
                         rendered_cmd = env.from_string(cmd_template).render(**target.variables)
                         session.send_line(rendered_cmd)
@@ -381,6 +388,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                             log(f"Sent (no wait): {rendered_cmd}")
                     
                     elif step_type == "expect":
+                        initialize_paging()
                         pattern_template = step.get("pattern", "")
                         response_template = step.get("response", "")
                         
@@ -410,6 +418,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                             raise TimeoutError(f"Timeout waiting for pattern: {pattern}")
 
                     elif step_type == "priv_mode":
+                         initialize_paging()
                          cmd = step.get("content") or step.get("command")
                          pwd = target.variables.get("enable_password") or target.variables.get("password")
                          runner.ensure_priv_exec(custom_command=cmd, password=pwd)
@@ -425,15 +434,19 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                              pwd = env.from_string(pwd).render(**target.variables)
                          
                          log("Waiting for authentication/link-up...")
-                         runner.authenticate(username=user, password=pwd)
+                         runner.authenticate(username=user, password=pwd, initial_buffer=initial_buffer)
+                         initial_buffer = ""
                          log("Authenticated or already logged in.")
+                         initialize_paging()
                          
                     elif step_type == "config_mode":
+                         initialize_paging()
                          cmd = step.get("content") or step.get("command")
                          runner.enter_config_mode(custom_command=cmd)
                          log(f"Entered config mode (using: {cmd or 'default'}).")
                          
                     elif step_type == "exit_config":
+                         initialize_paging()
                          cmd = step.get("content") or step.get("command")
                          runner.exit_config_mode(custom_command=cmd)
                          log(f"Exited config mode (using: {cmd or 'default'}).")
@@ -480,6 +493,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 rendered_config = template.render(**target.variables)
                 log("Template rendered successfully.")
                 
+                initialize_paging()
                 pwd = target.variables.get("enable_password") or target.variables.get("password")
                 runner.ensure_priv_exec(password=pwd)
                 log("Acquired privileged mode.")

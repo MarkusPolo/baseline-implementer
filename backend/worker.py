@@ -89,33 +89,39 @@ def run_verification_checks(runner: CommandRunner, checks: list, variables: dict
     def log_msg(msg):
         if log_func:
             log_func(msg)
+
+    env = Environment(undefined=StrictUndefined)
     
     # Pre-calculate last indices for commands if we are including full output
     last_indices = {}
     if include_full_output:
         for idx, check in enumerate(checks):
-            cmd = check.get("command", "show run")
+            cmd_raw = check.get("command", "show run")
+            try:
+                cmd = env.from_string(cmd_raw).render(**variables)
+            except Exception:
+                cmd = cmd_raw
             last_indices[cmd] = idx
 
     for idx, check in enumerate(checks):
         check_name = check.get("name", "Unnamed Check")
-        command = check.get("command", "show run")
+        command_raw = check.get("command", "show run")
         check_type = check.get("type", "regex_match")
         pattern_raw = check.get("pattern", "")
         evidence_lines = check.get("evidence_lines", 3)
         
-        # Render pattern with variables (Jinja2)
+        # Render command and pattern with variables (Jinja2)
         try:
-            env = Environment(undefined=StrictUndefined)
+            command = env.from_string(command_raw).render(**variables)
             pattern = env.from_string(pattern_raw).render(**variables)
         except Exception as e:
-            log_msg(f"Error rendering pattern for '{check_name}': {str(e)}")
+            log_msg(f"Error rendering verification check '{check_name}': {str(e)}")
             results.append({
                 "check_name": check_name,
                 "status": "error",
                 "evidence": "",
                 "full_output": "",
-                "message": f"Pattern render error: {str(e)}"
+                "message": f"Verification render error: {str(e)}"
             })
             continue
         
@@ -347,6 +353,17 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
             runner = CommandRunner(session, prompt_patterns)
             
             paging_initialized = False
+            console_awake = False
+
+            def wake_console_once():
+                nonlocal console_awake, initial_buffer
+                if console_awake:
+                    return
+                log("Waking console...")
+                runner.wake_console(initial_buffer=initial_buffer)
+                initial_buffer = ""
+                console_awake = True
+                log("Console prompt detected.")
 
             def initialize_paging():
                 nonlocal paging_initialized
@@ -372,6 +389,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                     log(f"Step {i+1}: {step_type}")
                     
                     if step_type in ["send", "command"]:
+                        wake_console_once()
                         initialize_paging()
                         cmd_template = step.get("cmd", step.get("content", ""))
                         rendered_cmd = env.from_string(cmd_template).render(**target.variables)
@@ -392,6 +410,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                             log(f"Sent (no wait): {rendered_cmd}")
                     
                     elif step_type == "expect":
+                        wake_console_once()
                         initialize_paging()
                         pattern_template = step.get("pattern", "")
                         response_template = step.get("response", "")
@@ -422,6 +441,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                             raise TimeoutError(f"Timeout waiting for pattern: {pattern}")
 
                     elif step_type == "priv_mode":
+                         wake_console_once()
                          initialize_paging()
                          cmd = step.get("content") or step.get("command")
                          pwd = target.variables.get("enable_password") or target.variables.get("password")
@@ -440,16 +460,19 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                          log("Waiting for authentication/link-up...")
                          runner.authenticate(username=user, password=pwd, initial_buffer=initial_buffer)
                          initial_buffer = ""
+                         console_awake = True
                          log("Authenticated or already logged in.")
                          initialize_paging()
                          
                     elif step_type == "config_mode":
+                         wake_console_once()
                          initialize_paging()
                          cmd = step.get("content") or step.get("command")
                          runner.enter_config_mode(custom_command=cmd)
                          log(f"Entered config mode (using: {cmd or 'default'}).")
                          
                     elif step_type == "exit_config":
+                         wake_console_once()
                          initialize_paging()
                          cmd = step.get("content") or step.get("command")
                          runner.exit_config_mode(custom_command=cmd)
@@ -497,6 +520,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 rendered_config = template.render(**target.variables)
                 log("Template rendered successfully.")
                 
+                wake_console_once()
                 initialize_paging()
                 pwd = target.variables.get("enable_password") or target.variables.get("password")
                 runner.ensure_priv_exec(password=pwd)

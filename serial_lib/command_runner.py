@@ -31,6 +31,30 @@ class CommandRunner:
         out += self.session.wait_for(self.detector.PROMPT_ANY, timeout=8.0)
         return out
 
+    def wake_console(self, initial_buffer: str = "", timeout: float = 15.0) -> str:
+        """
+        Wake a sleeping serial console and return once a usable CLI prompt appears.
+        Raises clearly if the device is waiting for login credentials.
+        """
+        buf = initial_buffer + self.session.read_available()
+        end_time = time.monotonic() + timeout
+
+        while time.monotonic() < end_time:
+            normalized = self.detector.normalize(buf)
+            tail = normalized[-512:]
+
+            if self.detector.PROMPT_ANY.search(tail):
+                return normalized
+
+            if self.detector.PROMPT_USERNAME.search(tail) or self.detector.PROMPT_PWD.search(tail):
+                raise RuntimeError("Device is at a login/password prompt. Add a Login / Auth step before command steps.")
+
+            self.session.send_line("")
+            time.sleep(0.5)
+            buf += self.session.read_available()
+
+        raise TimeoutError(f"Timed out waking console. Last output seen:\n{buf[-500:]}")
+
     def ensure_priv_exec(self, custom_command: Optional[str] = None, password: Optional[str] = None):
         buf = self.get_prompted()
 

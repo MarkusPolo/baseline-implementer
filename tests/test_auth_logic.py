@@ -38,6 +38,19 @@ class RawWriteSerial:
     def flush(self):
         pass
 
+class WakeSession:
+    def __init__(self, outputs: List[str]):
+        self.outputs = outputs
+        self.sent = []
+
+    def send_line(self, line: str):
+        self.sent.append(line)
+
+    def read_available(self) -> str:
+        if not self.outputs:
+            return ""
+        return self.outputs.pop(0)
+
 class MockSession:
     def __init__(self, serial_mock: MockSerial):
         self.ser = serial_mock
@@ -180,6 +193,32 @@ def test_serial_session_send_line_uses_single_carriage_return():
     assert fake_ser.writes == [b"rwa\r"]
     print("SerialSession sends one Enter, not CRLF.")
 
+def test_wake_console_sends_blank_until_prompt():
+    print("\n--- Testing Wake Console Sends Blank Until Prompt ---")
+    session = WakeSession(["", "", "Switch#"])
+    runner = CommandRunner(session)
+
+    out = runner.wake_console(timeout=2.0)
+
+    assert "Switch#" in out
+    assert session.sent == ["", ""]
+    print("Sleeping console woke before command execution.")
+
+def test_wake_console_stops_at_login_prompt():
+    print("\n--- Testing Wake Console Stops At Login Prompt ---")
+    session = WakeSession(["Login:"])
+    runner = CommandRunner(session)
+
+    try:
+        runner.wake_console(timeout=2.0)
+    except RuntimeError as exc:
+        assert "Login / Auth" in str(exc)
+    else:
+        raise AssertionError("Expected login prompt guard to raise")
+
+    assert session.sent == []
+    print("Login prompt guard worked.")
+
 if __name__ == "__main__":
     test_auth_sequence()
     test_already_authenticated()
@@ -187,3 +226,5 @@ if __name__ == "__main__":
     test_auth_uses_initial_password_prompt_without_blank_wakeup()
     test_extreme_access_denied_then_login_sequence()
     test_serial_session_send_line_uses_single_carriage_return()
+    test_wake_console_sends_blank_until_prompt()
+    test_wake_console_stops_at_login_prompt()

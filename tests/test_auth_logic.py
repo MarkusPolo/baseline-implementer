@@ -28,12 +28,22 @@ class MockSerial:
             return res.encode()
         return b""
 
+class RawWriteSerial:
+    def __init__(self):
+        self.writes = []
+
+    def write(self, data: bytes):
+        self.writes.append(data)
+
+    def flush(self):
+        pass
+
 class MockSession:
     def __init__(self, serial_mock: MockSerial):
         self.ser = serial_mock
     
     def send_line(self, line: str):
-        self.ser.write((line + "\r\n").encode())
+        self.ser.write((line + "\r").encode())
         
     def read_available(self) -> str:
         return self.ser.read(4096).decode()
@@ -57,6 +67,7 @@ sys.path.append(os.getcwd())
 
 from serial_lib.prompt_detector import PromptDetector
 from serial_lib.command_runner import CommandRunner
+from serial_lib.serial_session import SerialSession
 
 def test_auth_sequence():
     print("\n--- Testing Authentication Sequence (Username -> Password -> Prompt) ---")
@@ -157,9 +168,22 @@ def test_extreme_access_denied_then_login_sequence():
     assert mock_ser.sent == ["admin", "password123"]
     print("Recovered from Extreme access-denied banner and authenticated.")
 
+def test_serial_session_send_line_uses_single_carriage_return():
+    print("\n--- Testing Serial Line Ending Is Single CR ---")
+    fake_ser = RawWriteSerial()
+    session = SerialSession("unused")
+    session.ser = fake_ser
+    session.write_delay = 0
+
+    session.send_line("rwa")
+
+    assert fake_ser.writes == [b"rwa\r"]
+    print("SerialSession sends one Enter, not CRLF.")
+
 if __name__ == "__main__":
     test_auth_sequence()
     test_already_authenticated()
     test_priv_exec_with_password()
     test_auth_uses_initial_password_prompt_without_blank_wakeup()
     test_extreme_access_denied_then_login_sequence()
+    test_serial_session_send_line_uses_single_carriage_return()

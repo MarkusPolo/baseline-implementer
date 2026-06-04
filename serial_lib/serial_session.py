@@ -53,7 +53,9 @@ class SerialSession:
     def send_line(self, line: str):
         if not self.ser:
             raise RuntimeError("Serial port not open")
-        self.ser.write((line + "\r\n").encode())
+        # Serial consoles use carriage return for Enter. Sending CRLF can be
+        # interpreted by some devices as two submits, which breaks login flows.
+        self.ser.write((line + "\r").encode())
         self.ser.flush()
         time.sleep(self.write_delay)
 

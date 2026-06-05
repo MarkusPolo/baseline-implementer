@@ -125,12 +125,14 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
 
         let currentLine = "";
         let tabCompletionBase = "";
+        let tabCompletionOutput = "";
         let pendingTabCompletion = false;
         let tabCompletionTimer: ReturnType<typeof setTimeout> | null = null;
 
         function beginTabCompletionCapture() {
             pendingTabCompletion = true;
             tabCompletionBase = currentLine;
+            tabCompletionOutput = "";
             if (tabCompletionTimer) {
                 clearTimeout(tabCompletionTimer);
             }
@@ -143,6 +145,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
         function endTabCompletionCapture() {
             pendingTabCompletion = false;
             tabCompletionBase = "";
+            tabCompletionOutput = "";
             if (tabCompletionTimer) {
                 clearTimeout(tabCompletionTimer);
                 tabCompletionTimer = null;
@@ -175,13 +178,34 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             return /[>#]/.test(value) || /\([^)]*$/.test(value);
         }
 
+        function mergeTabCompletion(base: string, output: string) {
+            const text = output.replace(/\r/g, "\n").split("\n").filter(Boolean).at(-1)?.trimEnd() || "";
+            if (!text || looksLikePromptFragment(text)) return "";
+
+            if (text.startsWith(base)) {
+                return text;
+            }
+
+            let overlap = 0;
+            const maxOverlap = Math.min(base.length, text.length);
+            for (let length = maxOverlap; length > 0; length--) {
+                if (base.endsWith(text.slice(0, length))) {
+                    overlap = length;
+                    break;
+                }
+            }
+
+            return base + text.slice(overlap);
+        }
+
         function handleTabCompletionOutput(data: string) {
             if (!onCommandRef.current || !pendingTabCompletion || !currentLine) return;
 
             const cleaned = applyBackspaces(stripAnsi(data));
             if (!cleaned) return;
+            tabCompletionOutput += cleaned;
 
-            const normalized = cleaned.replace(/\r/g, "\n");
+            const normalized = tabCompletionOutput.replace(/\r/g, "\n");
             const lines = normalized.split("\n").map(line => line.trimEnd()).filter(Boolean);
             const promptCommand = [...lines]
                 .reverse()
@@ -194,9 +218,9 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                 return;
             }
 
-            const fullCommandIndex = cleaned.lastIndexOf(tabCompletionBase);
+            const fullCommandIndex = tabCompletionOutput.lastIndexOf(tabCompletionBase);
             if (tabCompletionBase && fullCommandIndex >= 0) {
-                const possibleCommand = cleaned.slice(fullCommandIndex).split(/[\r\n]/)[0].trimEnd();
+                const possibleCommand = tabCompletionOutput.slice(fullCommandIndex).split(/[\r\n]/)[0].trimEnd();
                 if (possibleCommand.startsWith(tabCompletionBase)) {
                     currentLine = possibleCommand;
                     endTabCompletionCapture();
@@ -204,15 +228,14 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                 }
             }
 
-            // Inline completion usually arrives as only the missing suffix.
-            // Prompt redraw fragments can also arrive inline, so reject those.
-            if (
-                !/[\r\n]/.test(cleaned) &&
-                /^[\x20-\x7e]+$/.test(cleaned) &&
-                cleaned.length <= 80 &&
-                !looksLikePromptFragment(cleaned)
-            ) {
-                currentLine += cleaned;
+            // Inline completion may be only the missing suffix, or a redraw that
+            // repeats part/all of the command already typed before Tab.
+            if (!/[\r\n]/.test(tabCompletionOutput) && /^[\x20-\x7e]+$/.test(tabCompletionOutput) && tabCompletionOutput.length <= 120) {
+                const mergedCommand = mergeTabCompletion(tabCompletionBase, tabCompletionOutput);
+                if (!mergedCommand || mergedCommand === tabCompletionBase) {
+                    return;
+                }
+                currentLine = mergedCommand;
                 endTabCompletionCapture();
             }
         }

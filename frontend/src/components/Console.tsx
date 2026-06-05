@@ -124,11 +124,13 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
         });
 
         let currentLine = "";
+        let tabCompletionBase = "";
         let pendingTabCompletion = false;
         let tabCompletionTimer: ReturnType<typeof setTimeout> | null = null;
 
         function beginTabCompletionCapture() {
             pendingTabCompletion = true;
+            tabCompletionBase = currentLine;
             if (tabCompletionTimer) {
                 clearTimeout(tabCompletionTimer);
             }
@@ -140,6 +142,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
 
         function endTabCompletionCapture() {
             pendingTabCompletion = false;
+            tabCompletionBase = "";
             if (tabCompletionTimer) {
                 clearTimeout(tabCompletionTimer);
                 tabCompletionTimer = null;
@@ -150,16 +153,32 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             return value.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
         }
 
+        function applyBackspaces(value: string) {
+            let output = "";
+            for (const char of value) {
+                if (char === "\x08" || char === "\x7f") {
+                    output = output.slice(0, -1);
+                } else {
+                    output += char;
+                }
+            }
+            return output;
+        }
+
         function extractPromptCommand(line: string) {
             const cleanedLine = line.replace(/\r/g, "").trimEnd();
             const match = cleanedLine.match(/(?:^|\s)(?:[\w.-]+(?:\([^)]+\))?[>#])\s*(.*)$/);
             return match?.[1]?.trimEnd() || "";
         }
 
-        function handleTabCompletionOutput(data: string) {
-            if (!pendingTabCompletion || !currentLine) return;
+        function looksLikePromptFragment(value: string) {
+            return /[>#]/.test(value) || /\([^)]*$/.test(value);
+        }
 
-            const cleaned = stripAnsi(data).replace(/\x08/g, "");
+        function handleTabCompletionOutput(data: string) {
+            if (!onCommandRef.current || !pendingTabCompletion || !currentLine) return;
+
+            const cleaned = applyBackspaces(stripAnsi(data));
             if (!cleaned) return;
 
             const normalized = cleaned.replace(/\r/g, "\n");
@@ -167,7 +186,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             const promptCommand = [...lines]
                 .reverse()
                 .map(extractPromptCommand)
-                .find(command => command.startsWith(currentLine));
+                .find(command => command.startsWith(currentLine) || command.startsWith(tabCompletionBase));
 
             if (promptCommand) {
                 currentLine = promptCommand;
@@ -175,9 +194,24 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                 return;
             }
 
+            const fullCommandIndex = cleaned.lastIndexOf(tabCompletionBase);
+            if (tabCompletionBase && fullCommandIndex >= 0) {
+                const possibleCommand = cleaned.slice(fullCommandIndex).split(/[\r\n]/)[0].trimEnd();
+                if (possibleCommand.startsWith(tabCompletionBase)) {
+                    currentLine = possibleCommand;
+                    endTabCompletionCapture();
+                    return;
+                }
+            }
+
             // Inline completion usually arrives as only the missing suffix.
-            // Multiline output is often an ambiguous-completion list, so ignore it.
-            if (!/[\r\n]/.test(cleaned) && /^[\x20-\x7e]+$/.test(cleaned) && cleaned.length <= 80) {
+            // Prompt redraw fragments can also arrive inline, so reject those.
+            if (
+                !/[\r\n]/.test(cleaned) &&
+                /^[\x20-\x7e]+$/.test(cleaned) &&
+                cleaned.length <= 80 &&
+                !looksLikePromptFragment(cleaned)
+            ) {
                 currentLine += cleaned;
                 endTabCompletionCapture();
             }

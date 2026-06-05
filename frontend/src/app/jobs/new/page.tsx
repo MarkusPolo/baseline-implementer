@@ -1,10 +1,11 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, FileSpreadsheet, FileText, Play, Search, X } from "lucide-react";
 import api from "@/lib/api";
 import CSVImportModal from "@/components/CSVImportModal";
+import { byDeviceLayoutPortOrder } from "@/lib/ports";
 
 type SchemaProperty = {
     title?: string;
@@ -43,6 +44,8 @@ function NewJobBuilder() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const preselectedTemplateId = Number(searchParams.get("templateId"));
+    const targetPortsRef = useRef<HTMLElement | null>(null);
+    const shouldScrollToPortsRef = useRef(false);
 
     const [templates, setTemplates] = useState<Template[]>([]);
     const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
@@ -66,6 +69,7 @@ function NewJobBuilder() {
     const selectedRequired = selectedTemplate?.config_schema?.required || [];
     const variableKeys = Object.keys(selectedProperties);
     const enabledPorts = ports.filter(p => p.enabled);
+    const displayPorts = useMemo(() => byDeviceLayoutPortOrder(ports), [ports]);
 
     const filteredTemplates = useMemo(() => {
         const query = templateSearch.trim().toLowerCase();
@@ -84,11 +88,26 @@ function NewJobBuilder() {
 
     const selectTemplate = useCallback((template: Template) => {
         setSelectedTemplate(template);
+        shouldScrollToPortsRef.current = true;
         setPorts(currentPorts => currentPorts.map(port => ({
             ...port,
             variables: buildEmptyVariables(template)
         })));
     }, [buildEmptyVariables]);
+
+    useEffect(() => {
+        if (!selectedTemplate || !shouldScrollToPortsRef.current) return;
+
+        const frame = window.requestAnimationFrame(() => {
+            targetPortsRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start"
+            });
+            shouldScrollToPortsRef.current = false;
+        });
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [selectedTemplate]);
 
     useEffect(() => {
         if (!preselectedTemplateId || templates.length === 0 || selectedTemplate) return;
@@ -309,7 +328,7 @@ function NewJobBuilder() {
             </section>
 
             {selectedTemplate && (
-                <section className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
+                <section ref={targetPortsRef} className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
                     <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
                             <h2 className="text-lg font-semibold text-white">Configure Target Ports</h2>
@@ -334,8 +353,11 @@ function NewJobBuilder() {
                         </div>
                     </div>
 
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        {ports.map((port, idx) => (
+                    <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-8">
+                        {displayPorts.map((port) => {
+                            const portIndex = port.id - 1;
+
+                            return (
                             <div
                                 key={port.id}
                                 className={`rounded-xl border p-4 transition-all ${port.enabled
@@ -345,7 +367,7 @@ function NewJobBuilder() {
                             >
                                 <div className="mb-4 flex items-center justify-between">
                                     <button
-                                        onClick={() => togglePort(idx)}
+                                        onClick={() => togglePort(portIndex)}
                                         className={`rounded-md border px-3 py-1 text-xs font-semibold transition-colors ${port.enabled
                                             ? "border-blue-500 bg-blue-600 text-white"
                                             : "border-neutral-700 bg-neutral-800 text-neutral-400 hover:text-white"
@@ -356,7 +378,7 @@ function NewJobBuilder() {
                                     <input
                                         type="checkbox"
                                         checked={port.enabled}
-                                        onChange={() => togglePort(idx)}
+                                        onChange={() => togglePort(portIndex)}
                                         className="h-4 w-4 accent-blue-600"
                                     />
                                 </div>
@@ -377,7 +399,7 @@ function NewJobBuilder() {
                                                         className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-neutral-700 focus:border-blue-500"
                                                         placeholder={prop.title || key}
                                                         value={port.variables[key] || ""}
-                                                        onChange={(e) => updatePortVariable(idx, key, e.target.value)}
+                                                        onChange={(e) => updatePortVariable(portIndex, key, e.target.value)}
                                                     />
                                                 </div>
                                             ))}
@@ -387,7 +409,8 @@ function NewJobBuilder() {
                                     <p className="text-xs text-neutral-600">Enable this port to configure variables.</p>
                                 )}
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </section>
             )}

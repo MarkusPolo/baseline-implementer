@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Plug, Monitor, Lock, RefreshCw } from "lucide-react";
+import { byDeviceLayoutPortOrder } from "@/lib/ports";
 
 interface PortStatus {
     id: number;
@@ -53,7 +54,7 @@ export function PortSelector({ onSelect, activeSessions }: PortSelectorProps) {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-                {ports.map((port) => {
+                {byDeviceLayoutPortOrder(ports).map((port) => {
                     const isSessionActive = activeSessions.includes(port.id);
                     // Determine state
                     // 1. Session Active (User already has this open) -> Blue/Green

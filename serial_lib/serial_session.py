@@ -35,6 +35,16 @@ class SerialSession:
             b = self.ser.read(4096)
         return b.decode(errors="replace") if b else ""
 
+    def read_pending(self, max_bytes: int = 4096) -> str:
+        if not self.ser:
+            raise RuntimeError("Serial port not open")
+        waiting = self.ser.in_waiting
+        if waiting <= 0:
+            return ""
+        with self.lock:
+            b = self.ser.read(min(waiting, max_bytes))
+        return b.decode(errors="replace") if b else ""
+
     def read(self, size: int = 1) -> str:
         if not self.ser:
             raise RuntimeError("Serial port not open")
@@ -66,6 +76,13 @@ class SerialSession:
             self.ser.write(data.encode())
             self.ser.flush()
         time.sleep(self.write_delay)
+
+    def send_interactive(self, data: str):
+        if not self.ser:
+            raise RuntimeError("Serial port not open")
+        with self.lock:
+            self.ser.write(data.encode())
+            self.ser.flush()
 
     def wait_for(self, pattern: re.Pattern, timeout: float = 10.0) -> str:
         buf = ""

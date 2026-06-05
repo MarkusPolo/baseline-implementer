@@ -99,11 +99,10 @@ async def console_websocket(websocket: WebSocket, port_id: str):
             try:
                 while True:
                     if not state["is_capturing"]:
-                        # read_available uses session.lock internally
-                        data = await asyncio.to_thread(session.read_available)
+                        data = await asyncio.to_thread(session.read_pending)
                         if data:
                             await websocket.send_text(data)
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(0.005)
             except Exception:
                 pass
 
@@ -140,36 +139,61 @@ async def console_websocket(websocket: WebSocket, port_id: str):
                 state["is_capturing"] = False
 
         async def ws_to_serial():
+            def translate_input(value: str) -> str:
+                if value == "\x7f": # xterm.js default
+                    if state["backspace_mode"] == "CTRLH":
+                        return "\x08"
+                    return "\x7f"
+                return value
+
+            async def handle_control_message(value: str) -> bool:
+                if not (value.startswith("{") and value.endswith("}")):
+                    return False
+                try:
+                    data = json.loads(value)
+                    msg_type = data.get("type")
+
+                    if msg_type == "capture":
+                        cmd = data.get("command")
+                        if cmd:
+                            asyncio.create_task(run_capture(cmd))
+                        return True
+                    if msg_type == "set_backspace":
+                        state["backspace_mode"] = data.get("mode", "DEL")
+                        return True
+                except json.JSONDecodeError:
+                    return False
+                return True
+
             try:
                 while True:
                     msg = await websocket.receive_text()
                     if not msg:
                         continue
-                    
-                    if msg.startswith("{") and msg.endswith("}"):
+
+                    if await handle_control_message(msg):
+                        continue
+
+                    if state["is_capturing"]:
+                        continue
+
+                    pending_input = [translate_input(msg)]
+                    while True:
                         try:
-                            data = json.loads(msg)
-                            msg_type = data.get("type")
-                            
-                            if msg_type == "capture":
-                                cmd = data.get("command")
-                                if cmd:
-                                    asyncio.create_task(run_capture(cmd))
-                            elif msg_type == "set_backspace":
-                                state["backspace_mode"] = data.get("mode", "DEL")
+                            next_msg = await asyncio.wait_for(websocket.receive_text(), timeout=0.004)
+                        except asyncio.TimeoutError:
+                            break
+
+                        if not next_msg:
                             continue
-                        except json.JSONDecodeError:
-                            pass
-                    
-                    # Backspace Translation Mapping
-                    if msg == "\x7f": # xterm.js default
-                        if state["backspace_mode"] == "CTRLH":
-                            msg = "\x08"
-                        else:
-                            msg = "\x7f"
-                    
-                    if not state["is_capturing"]:
-                         await asyncio.to_thread(session.send, msg)
+                        if await handle_control_message(next_msg):
+                            break
+                        if state["is_capturing"]:
+                            break
+                        pending_input.append(translate_input(next_msg))
+
+                    if pending_input and not state["is_capturing"]:
+                        await asyncio.to_thread(session.send_interactive, "".join(pending_input))
             except WebSocketDisconnect:
                 raise
             except Exception:

@@ -193,7 +193,7 @@ export default function ConsolePage() {
                                     >
                                         <Console
                                             portId={session.portId.toString()}
-                                            onCommand={activeSessionId === session.id ? handleCommand : undefined}
+                                            onCommand={isRecording && activeSessionId === session.id ? handleCommand : undefined}
                                             className="h-[600px] border-none rounded-none"
                                         />
                                     </div>

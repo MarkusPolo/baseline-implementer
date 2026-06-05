@@ -115,7 +115,12 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             if (socket.readyState === WebSocket.OPEN) {
                 socket.send(data);
             }
-            handleRecordingInput(data);
+            if (onCommandRef.current) {
+                handleRecordingInput(data);
+            } else {
+                currentLine = "";
+                endTabCompletionCapture();
+            }
         });
 
         let currentLine = "";

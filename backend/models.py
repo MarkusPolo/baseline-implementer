@@ -3,48 +3,29 @@ from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON, DateTime
 from sqlalchemy.orm import relationship
 from .database import Base
 
-class DeviceProfile(Base):
-    __tablename__ = "device_profiles"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    vendor = Column(String)  # e.g., "Cisco", "HP", "Aruba"
-    description = Column(Text, nullable=True)
-    prompt_patterns = Column(JSON, nullable=False)  # {user, priv, config, any}
-    commands = Column(JSON, nullable=False)  # {show_version, save_config, etc.}
-    error_markers = Column(JSON, default=list)  # ["% Invalid", "Error:", etc.]
-    detection_command = Column(String, nullable=True)  # Optional command for auto-detect
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-    templates = relationship("Template", back_populates="profile")
-
 class Template(Base):
     __tablename__ = "templates"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
-    body = Column(Text, nullable=True)  # Deprecated: Jinja2 template
-    steps = Column(JSON, nullable=True) # New: List of toolbox steps
-    config_schema = Column(JSON, nullable=False) # JSON schema for variables
-    verification = Column(JSON, default=list)  # Deprecated: List of verification checks
-    is_baseline = Column(Integer, default=0) # 1 for baseline, 0 for project-specific
-    profile_id = Column(Integer, ForeignKey("device_profiles.id"), nullable=True)  # Device profile
+    body = Column(Text, nullable=True)
+    steps = Column(JSON, nullable=False)
+    config_schema = Column(JSON, nullable=False)
+    verification = Column(JSON, default=list)
+    is_baseline = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    profile = relationship("DeviceProfile", back_populates="templates")
     jobs = relationship("Job", back_populates="template")
 
 class Job(Base):
     __tablename__ = "jobs"
 
     id = Column(Integer, primary_key=True, index=True)
-    template_id = Column(Integer, ForeignKey("templates.id"), nullable=True)
-    macro_id = Column(Integer, ForeignKey("macros.id"), nullable=True)
+    template_id = Column(Integer, ForeignKey("templates.id"), nullable=False)
     status = Column(String, default="queued") # queued, running, completed, failed
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     template = relationship("Template", back_populates="jobs")
-    macro = relationship("Macro") # Add relationship to Macro
     targets = relationship("JobTarget", back_populates="job")
 
 class JobTarget(Base):
@@ -63,16 +44,6 @@ class JobTarget(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
     job = relationship("Job", back_populates="targets")
-
-class Macro(Base):
-    __tablename__ = "macros"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    description = Column(Text, nullable=True)
-    steps = Column(JSON, nullable=False) # List of steps {type, cmd, wait_prompt, etc.}
-    config_schema = Column(JSON, nullable=True) # JSON schema for variables
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Setting(Base):
     __tablename__ = "settings"

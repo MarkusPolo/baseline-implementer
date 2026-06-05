@@ -68,13 +68,13 @@ function TemplateBuilder() {
                         let command = s.command;
                         let check_type = s.check_type;
 
-                        // Normalize 'send' (from macros) to 'command'
+                        // Normalize recorded steps to builder command steps.
                         if (type === 'send') {
                             type = 'command';
                             content = s.cmd;
                         }
 
-                        // Normalize 'verify' (from macros) fields
+                        // Normalize recorded verification fields.
                         if (type === 'verify') {
                             if (s.cmd && !command) {
                                 command = s.cmd;
@@ -183,12 +183,10 @@ function TemplateBuilder() {
             const payload = {
                 name,
                 is_baseline: 0,
-                profile_id: null,
                 steps: steps.map((step) => Object.fromEntries(
                     Object.entries(step).filter(([key]) => key !== 'id')
-                )), // Remove UI-only ID
+                )),
                 config_schema,
-                body: '', // Empty body as we use steps now
             };
 
             if (editId) {

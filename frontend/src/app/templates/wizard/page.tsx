@@ -1,24 +1,15 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, ChevronLeft, Save, Code } from "lucide-react";
 import api from "@/lib/api";
 
-type Profile = {
-    id: number;
-    name: string;
-    vendor: string;
-};
-
 export default function WizardPage() {
     const router = useRouter();
     const [step, setStep] = useState(1);
-    const [profiles, setProfiles] = useState<Profile[]>([]);
     const [formData, setFormData] = useState({
         name: "",
-        description: "",
-        profileId: undefined as number | undefined,
         mgmtVlan: "1",
         mgmtIpType: "static", // static, dhcp
         enableSsh: true,
@@ -26,49 +17,52 @@ export default function WizardPage() {
         generateCrypto: true,
     });
 
-    useEffect(() => {
-        // Load profiles
-        api.get("profiles/").then((res) => setProfiles(res.data)).catch(() => { });
-    }, []);
-
     const nextStep = () => setStep(s => s + 1);
     const prevStep = () => setStep(s => s - 1);
 
-    const generateTemplate = () => {
-        let body = "";
+    const generateCommands = () => {
+        const commands: string[] = [];
 
-        // Basic stuff
-        body += "hostname {{ hostname }}\n";
-        body += "!\n";
+        commands.push("hostname {{ hostname }}");
 
         // Mgmt VLAN
-        body += `interface Vlan${formData.mgmtVlan}\n`;
+        commands.push(`interface Vlan${formData.mgmtVlan}`);
         if (formData.mgmtIpType === "static") {
-            body += " ip address {{ mgmt_ip }} {{ mgmt_mask }}\n";
+            commands.push("ip address {{ mgmt_ip }} {{ mgmt_mask }}");
         } else {
-            body += " ip address dhcp\n";
+            commands.push("ip address dhcp");
         }
-        body += " no shutdown\n";
-        body += "!\n";
+        commands.push("no shutdown");
 
         // Gateway
-        body += "ip default-gateway {{ gateway }}\n";
-        body += "!\n";
+        commands.push("ip default-gateway {{ gateway }}");
 
         // SSH & User
         if (formData.enableSsh) {
-            body += `username ${formData.localUser} privilege 15 secret {{ secret }}\n`;
-            body += "ip domain-name example.com\n";
+            commands.push(`username ${formData.localUser} privilege 15 secret {{ secret }}`);
+            commands.push("ip domain-name example.com");
             if (formData.generateCrypto) {
-                body += "crypto key generate rsa modulus 2048\n";
+                commands.push("crypto key generate rsa modulus 2048");
             }
-            body += "line vty 0 4\n";
-            body += " transport input ssh\n";
-            body += " login local\n";
-            body += "!\n";
+            commands.push("line vty 0 4");
+            commands.push("transport input ssh");
+            commands.push("login local");
         }
 
-        return body;
+        return commands;
+    };
+
+    const generateSteps = () => {
+        return [
+            { type: "priv_mode", content: "en" },
+            { type: "config_mode", content: "conf t" },
+            ...generateCommands().map(command => ({
+                type: "command",
+                content: command,
+                wait_prompt: true
+            })),
+            { type: "exit_config", content: "end" }
+        ];
     };
 
     const generateSchema = () => {
@@ -86,16 +80,23 @@ export default function WizardPage() {
             fields.push({ name: "secret", label: `${formData.localUser} Password`, type: "password", required: true });
         }
 
-        return { fields };
+        return {
+            type: "object",
+            properties: Object.fromEntries(fields.map(field => [
+                field.name,
+                { type: "string", title: field.label }
+            ])),
+            required: fields.filter(field => field.required).map(field => field.name)
+        };
     };
 
     const handleSubmit = async () => {
         try {
             await api.post("templates/", {
                 name: formData.name,
-                body: generateTemplate(),
+                steps: generateSteps(),
                 config_schema: generateSchema(),
-                profile_id: formData.profileId
+                is_baseline: 0
             });
             router.push("/templates");
         } catch (err) {
@@ -134,27 +135,6 @@ export default function WizardPage() {
                                 onChange={e => setFormData({ ...formData, name: e.target.value })}
                                 placeholder="e.g. Access Switch L2"
                             />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-neutral-300">Description</label>
-                            <textarea
-                                className="w-full rounded bg-neutral-950 border border-neutral-700 px-3 py-2 text-white mt-1"
-                                value={formData.description}
-                                onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                placeholder="Optional description"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-neutral-300">Device Profile (Optional)</label>
-                            <select
-                                className="w-full rounded bg-neutral-950 border border-neutral-700 px-3 py-2 text-white mt-1"
-                                value={formData.profileId || ""}
-                                onChange={e => setFormData({ ...formData, profileId: e.target.value ? parseInt(e.target.value) : undefined })}
-                            >
-                                <option value="">-- Generic/Default --</option>
-                                {profiles.map(p => <option key={p.id} value={p.id}>{p.name} ({p.vendor})</option>)}
-                            </select>
-                            <p className="text-xs text-neutral-500 mt-1">Select a device profile to use vendor-specific command patterns.</p>
                         </div>
                     </div>
                 )}
@@ -229,7 +209,7 @@ export default function WizardPage() {
                             <div className="space-y-2">
                                 <span className="text-xs uppercase text-neutral-500 font-bold block">Generated Config</span>
                                 <pre className="text-xs font-mono bg-black p-3 rounded-lg overflow-x-auto text-green-400 border border-neutral-800">
-                                    {generateTemplate()}
+                                    {generateCommands().join("\n")}
                                 </pre>
                             </div>
                             <div className="space-y-2">

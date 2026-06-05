@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Console } from "@/components/Console";
-import { MacroEditor } from "@/components/MacroEditor";
+import { TemplateEditor } from "@/components/TemplateEditor";
 import { Save, Trash2, Play, Plus, X, Monitor } from "lucide-react";
 
 import { PortSelector } from "@/components/PortSelector";
@@ -72,19 +72,13 @@ export default function ConsolePage() {
         }
     };
 
-    const handleSaveTemplate = async (name: string, description: string, steps: any[], schema: any) => {
+    const handleSaveTemplate = async (name: string, steps: any[], schema: any) => {
         try {
-            const body = steps
-                .filter(s => s.type === "send")
-                .map(s => s.cmd)
-                .join("\n");
-
             const response = await fetch("/api/templates/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     name,
-                    body: `! Description: ${description}\n${body}`,
                     steps,
                     config_schema: schema,
                     is_baseline: 0
@@ -106,7 +100,7 @@ export default function ConsolePage() {
     if (isEditing) {
         return (
             <div className="mx-auto max-w-4xl">
-                <MacroEditor
+                <TemplateEditor
                     initialSteps={recordedCommands}
                     onSave={handleSaveTemplate}
                     onCancel={() => setIsEditing(false)}

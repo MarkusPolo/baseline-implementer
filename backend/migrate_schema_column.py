@@ -62,19 +62,19 @@ def migrate():
             CREATE TABLE templates_new (
                 id INTEGER PRIMARY KEY,
                 name VARCHAR UNIQUE NOT NULL,
-                body TEXT NOT NULL,
+                body TEXT,
+                steps JSON,
                 config_schema JSON NOT NULL,
                 verification JSON,
-                profile_id INTEGER,
-                created_at DATETIME,
-                FOREIGN KEY(profile_id) REFERENCES device_profiles(id)
+                is_baseline INTEGER DEFAULT 0,
+                created_at DATETIME
             )
         """)
         
         # Copy data from old table to new table
         cursor.execute("""
-            INSERT INTO templates_new (id, name, body, config_schema, verification, profile_id, created_at)
-            SELECT id, name, body, schema, verification, profile_id, created_at
+            INSERT INTO templates_new (id, name, body, steps, config_schema, verification, is_baseline, created_at)
+            SELECT id, name, body, NULL, schema, verification, 0, created_at
             FROM templates
         """)
         

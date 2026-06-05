@@ -9,15 +9,30 @@ router = APIRouter(
     tags=["templates"],
 )
 
+def _steps_from_body(body: str | None) -> list:
+    if not body:
+        return []
+    return [
+        {"type": "command", "content": line.strip(), "wait_prompt": True}
+        for line in body.splitlines()
+        if line.strip() and not line.strip().startswith("!")
+    ]
+
+def _standardize_template(template: models.Template, db: Session) -> models.Template:
+    if template.steps is None:
+        template.steps = _steps_from_body(template.body)
+        db.add(template)
+        db.commit()
+        db.refresh(template)
+    return template
+
 @router.post("/", response_model=schemas.Template)
 def create_template(template: schemas.TemplateCreate, db: Session = Depends(database.get_db)):
     db_template = models.Template(
         name=template.name, 
-        body=template.body, 
         config_schema=template.config_schema,
         steps=template.steps,
-        is_baseline=template.is_baseline,
-        profile_id=template.profile_id
+        is_baseline=template.is_baseline
     )
     db.add(db_template)
     try:
@@ -31,14 +46,14 @@ def create_template(template: schemas.TemplateCreate, db: Session = Depends(data
 @router.get("/", response_model=List[schemas.Template])
 def read_templates(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     templates = db.query(models.Template).offset(skip).limit(limit).all()
-    return templates
+    return [_standardize_template(template, db) for template in templates]
 
 @router.get("/{template_id}", response_model=schemas.Template)
 def read_template(template_id: int, db: Session = Depends(database.get_db)):
     template = db.query(models.Template).filter(models.Template.id == template_id).first()
     if template is None:
         raise HTTPException(status_code=404, detail="Template not found")
-    return template
+    return _standardize_template(template, db)
 
 @router.put("/{template_id}", response_model=schemas.Template)
 def update_template(template_id: int, template_update: schemas.TemplateUpdate, db: Session = Depends(database.get_db)):

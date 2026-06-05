@@ -75,6 +75,21 @@ def suggest_remediation(category: str) -> str:
     }
     return suggestions.get(category, suggestions[FailureCategory.UNKNOWN])
 
+def normalize_template_steps(template) -> list:
+    """Return executable template steps, converting legacy body templates if needed."""
+    if template and template.steps:
+        return template.steps
+
+    if not template or not template.body:
+        return []
+
+    steps = []
+    for line in template.body.splitlines():
+        command = line.strip()
+        if command and not command.startswith("!"):
+            steps.append({"type": "command", "content": command, "wait_prompt": True})
+    return steps
+
 def run_verification_checks(runner: CommandRunner, checks: list, variables: dict, log_func=None, output_cache=None, include_full_output=True) -> list:
     """
     Run verification checks and return results.
@@ -288,18 +303,12 @@ def execute_job(self, job_id: int):
         job.status = "running"
         db.commit()
 
-        template_body = job.template.body if job.template else None
         verification_checks = (job.template.verification if job.template else []) or []
-        macro_steps = job.macro.steps if job.macro else None
-        
-        # Load device profile if specified
-        profile = None
-        if job.template and job.template.profile_id:
-            profile = db.query(models.DeviceProfile).filter(models.DeviceProfile.id == job.template.profile_id).first()
+        template_steps = normalize_template_steps(job.template)
         
         # Simple sequential execution for MVP
         for target in job.targets:
-            process_target(db, target, template_body, verification_checks, profile, macro_steps)
+            process_target(db, target, template_steps, verification_checks)
         
         # Check overall status
         failed = any(t.status == "failed" for t in job.targets)
@@ -309,7 +318,7 @@ def execute_job(self, job_id: int):
     finally:
         db.close()
 
-def process_target(db: Session, target: models.JobTarget, template_body: str, verification_checks: list, profile=None, macro_steps=None):
+def process_target(db: Session, target: models.JobTarget, template_steps: list, verification_checks: list):
     target.status = "running"
     db.commit()
     
@@ -331,12 +340,6 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
 
         log(f"Connecting to {port_path}...")
         
-        # Extract prompt patterns from profile
-        prompt_patterns = None
-        if profile:
-            prompt_patterns = profile.prompt_patterns
-            log(f"Using device profile: {profile.name} ({profile.vendor})")
-        
         # Fetch baud rate from settings
         baud = 9600
         setting = db.query(models.Setting).filter(models.Setting.key == "port_baud_rates").first()
@@ -350,7 +353,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
         with SerialSession(port_path, baud=baud) as session:
             # Clear noise and wake up
             initial_buffer = session.drain(0.5)
-            runner = CommandRunner(session, prompt_patterns)
+            runner = CommandRunner(session)
             
             paging_initialized = False
             console_awake = False
@@ -373,13 +376,10 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                 paging_initialized = True
                 log("Interactive pagination handler active.")
             
-            # 3. Execute Steps (New Logic) or Template Body (Old Logic)
-            active_steps = macro_steps or (target.job.template.steps if target.job.template else None)
-            
-            if active_steps:
-                # Separate execution steps from verification checks
-                execution_steps = [s for s in active_steps if s.get("type") != "verify"]
-                verification_steps = [s for s in active_steps if s.get("type") == "verify"]
+            # 3. Execute standardized template steps
+            if template_steps:
+                execution_steps = [s for s in template_steps if s.get("type") != "verify"]
+                verification_steps = [s for s in template_steps if s.get("type") == "verify"]
                 
                 log(f"Executing {len(execution_steps)} configuration steps...")
                 target.verification_results = []
@@ -489,7 +489,7 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                     for i, step in enumerate(verification_steps):
                         checks.append({
                             "name": step.get("name", f"Check {i+1}"),
-                            "command": step.get("command", "show run"),
+                            "command": step.get("command", step.get("cmd", "show run")),
                             "type": step.get("check_type", "regex_match"),
                             "pattern": step.get("pattern", ""),
                             "evidence_lines": step.get("evidence_lines", 3)
@@ -514,70 +514,10 @@ def process_target(db: Session, target: models.JobTarget, template_body: str, ve
                     log("All steps completed successfully.")
 
             else:
-                # Fallback to Old Logic
-                log("Executing deprecated body-based template...")
-                template = env.from_string(template_body)
-                rendered_config = template.render(**target.variables)
-                log("Template rendered successfully.")
-                
-                wake_console_once()
-                initialize_paging()
-                pwd = target.variables.get("enable_password") or target.variables.get("password")
-                runner.ensure_priv_exec(password=pwd)
-                log("Acquired privileged mode.")
-                
-                runner.enter_config_mode()
-                log("Entered config mode.")
-                
-                # Send config line by line
-                redundant_cmds = ["en", "enable", "conf", "configure", "conf t", "configure terminal"]
-                
-                for line in rendered_config.splitlines():
-                    stripped = line.strip()
-                    if not stripped:
-                        continue
-                        
-                    # Filter redundant commands
-                    if stripped.lower() in redundant_cmds:
-                        log(f"Skipping redundant command: {stripped}")
-                        continue
-
-                    session.send_line(stripped)
-                    # We don't wait for a prompt here to be fast, but we should check for errors
-                    # and give a tiny bit of time for the buffer to fill if there's an error
-                    time.sleep(0.2) 
-                    
-                    # Opportunistic error check
-                    out = session.read_available()
-                    error_msg = runner.check_for_errors(out)
-                    if error_msg:
-                        log(f"WARNING: Error after '{stripped}': {error_msg}")
-                
-                log("Config sent.")
-                runner.exit_config_mode()
-                
-                # Run verification checks
-                if verification_checks:
-                    # DRAIN: Wait for Syslog messages
-                    log("Draining buffer (2s) to clear Syslog messages...")
-                    session.drain(2.0)
-                    
-                    log(f"Running {len(verification_checks)} verification check(s)...")
-                    check_results = run_verification_checks(runner, verification_checks, target.variables, log_func=log)
-                    target.verification_results = check_results
-                    
-                    failed_checks = [c for c in check_results if c["status"] in ["fail", "error"]]
-                    if failed_checks:
-                        target.status = "failed"
-                        target.failure_category = FailureCategory.VERIFICATION_FAILED
-                        target.remediation = "One or more verification checks failed."
-                        log(f"Verification FAILED: {len(failed_checks)}/{len(check_results)} checks failed.")
-                    else:
-                        target.status = "success"
-                        log(f"Verification PASSED: All {len(check_results)} checks passed.")
-                else:
-                    target.status = "success"
-                    log("No verification checks defined. Execution completed successfully.")
+                target.status = "failed"
+                target.failure_category = FailureCategory.TEMPLATE_ERROR
+                target.remediation = "Add at least one executable step to the template."
+                log("Template has no executable steps.")
 
     except Exception as e:
         target.status = "failed"

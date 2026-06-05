@@ -1,48 +1,24 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 import datetime
-
-# Device Profile Schemas
-class DeviceProfileBase(BaseModel):
-    name: str
-    vendor: str
-    description: Optional[str] = None
-    prompt_patterns: Dict[str, str]
-    commands: Dict[str, str]
-    error_markers: List[str] = []
-    detection_command: Optional[str] = None
-
-class DeviceProfileCreate(DeviceProfileBase):
-    pass
-
-class DeviceProfile(DeviceProfileBase):
-    id: int
-    created_at: datetime.datetime
-
-    class Config:
-        from_attributes = True
 
 # Template Schemas
 class TemplateBase(BaseModel):
     name: str
-    body: Optional[str] = None
-    steps: Optional[List[Dict[str, Any]]] = None
+    steps: List[Dict[str, Any]]
     config_schema: Dict[str, Any]
     verification: Optional[List[Dict[str, Any]]] = []
     is_baseline: Optional[int] = 0
-    profile_id: Optional[int] = None
 
 class TemplateCreate(TemplateBase):
     pass
 
 class TemplateUpdate(BaseModel):
     name: Optional[str] = None
-    body: Optional[str] = None
     steps: Optional[List[Dict[str, Any]]] = None
     config_schema: Optional[Dict[str, Any]] = None
     verification: Optional[List[Dict[str, Any]]] = None
     is_baseline: Optional[int] = None
-    profile_id: Optional[int] = None
 
 class Template(TemplateBase):
     id: int
@@ -74,40 +50,17 @@ class JobTarget(JobTargetBase):
         from_attributes = True
 
 class JobCreate(BaseModel):
-    template_id: Optional[int] = None
-    macro_id: Optional[int] = None
+    model_config = ConfigDict(extra="forbid")
+
+    template_id: int
     targets: List[JobTargetCreate]
 
 class Job(BaseModel):
     id: int
-    template_id: Optional[int] = None
-    macro_id: Optional[int] = None
+    template_id: int
     status: str
     created_at: datetime.datetime
     targets: List[JobTarget] = []
-
-    class Config:
-        from_attributes = True
-
-# Macro Schemas
-class MacroBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    steps: List[Dict[str, Any]]
-    config_schema: Optional[Dict[str, Any]] = None
-
-class MacroCreate(MacroBase):
-    pass
-
-class MacroUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    steps: Optional[List[Dict[str, Any]]] = None
-    config_schema: Optional[Dict[str, Any]] = None
-
-class Macro(MacroBase):
-    id: int
-    created_at: datetime.datetime
 
     class Config:
         from_attributes = True

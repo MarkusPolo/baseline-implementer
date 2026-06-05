@@ -28,22 +28,6 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/jobs/(?<nxtPid>[^/]+?)(?:/)?$"
-    },
-    {
-      "page": "/macros/deploy/[id]",
-      "regex": "^/macros/deploy/([^/]+?)(?:/)?$",
-      "routeKeys": {
-        "nxtPid": "nxtPid"
-      },
-      "namedRegex": "^/macros/deploy/(?<nxtPid>[^/]+?)(?:/)?$"
-    },
-    {
-      "page": "/macros/edit/[id]",
-      "regex": "^/macros/edit/([^/]+?)(?:/)?$",
-      "routeKeys": {
-        "nxtPid": "nxtPid"
-      },
-      "namedRegex": "^/macros/edit/(?<nxtPid>[^/]+?)(?:/)?$"
     }
   ],
   "staticRoutes": [
@@ -94,18 +78,6 @@
       "regex": "^/jobs/new(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/jobs/new(?:/)?$"
-    },
-    {
-      "page": "/macros",
-      "regex": "^/macros(?:/)?$",
-      "routeKeys": {},
-      "namedRegex": "^/macros(?:/)?$"
-    },
-    {
-      "page": "/profiles",
-      "regex": "^/profiles(?:/)?$",
-      "routeKeys": {},
-      "namedRegex": "^/profiles(?:/)?$"
     },
     {
       "page": "/settings",

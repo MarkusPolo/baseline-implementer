@@ -18,6 +18,10 @@ def list_jobs(skip: int = 0, limit: int = 100, db: Session = Depends(database.ge
 
 @router.post("/", response_model=schemas.Job)
 def create_job(job: schemas.JobCreate, db: Session = Depends(database.get_db)):
+    template = db.query(models.Template).filter(models.Template.id == job.template_id).first()
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+
     # Create the parent Job
     db_job = models.Job(template_id=job.template_id, status="queued")
     db.add(db_job)

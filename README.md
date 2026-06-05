@@ -55,8 +55,7 @@ conda activate switchconfig
 ### 4.1 Backend (Python)
 ```bash
 pip install fastapi uvicorn sqlalchemy celery redis jinja2 pyserial
-# Datenbank initialisieren und Standardprofile laden
-python backend/seed_profiles.py
+# Datenbanktabellen werden beim Backend-Start erstellt.
 ```
 
 ### 4.2 Frontend (Node.js/JS)

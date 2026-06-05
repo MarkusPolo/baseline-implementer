@@ -1,7 +1,88 @@
+"use client";
+
 import Link from "next/link";
-import { ArrowRight, Play, FileText, Activity } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, Play, FileText, Activity, CheckCircle, Clock, XCircle } from "lucide-react";
+import api from "@/lib/api";
+
+type PortStatus = {
+  busy: boolean;
+};
+
+type Template = {
+  id: number;
+};
+
+type JobTarget = {
+  id: number;
+  status: string;
+};
+
+type Job = {
+  id: number;
+  template_id: number;
+  status: string;
+  created_at: string;
+  targets: JobTarget[];
+};
 
 export default function Home() {
+  const [ports, setPorts] = useState<PortStatus[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboard() {
+      try {
+        const [portsRes, templatesRes, jobsRes] = await Promise.all([
+          fetch("/api/console/ports"),
+          api.get("templates/"),
+          api.get("jobs/"),
+        ]);
+
+        if (!portsRes.ok) {
+          throw new Error("Could not load console locks");
+        }
+
+        const portsData = (await portsRes.json()) as PortStatus[];
+
+        if (!cancelled) {
+          setPorts(portsData);
+          setTemplates(templatesRes.data);
+          setJobs(jobsRes.data);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError("Dashboard data could not be loaded.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadDashboard();
+    const intervalId = window.setInterval(loadDashboard, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const activeSessions = ports.filter((port) => port.busy).length;
+  const configuredTargets = jobs.reduce(
+    (total, job) => total + job.targets.filter((target) => target.status === "success").length,
+    0
+  );
+  const recentJobs = useMemo(() => jobs.slice(0, 5), [jobs]);
+
   return (
     <div className="space-y-8">
       <div>
@@ -11,10 +92,31 @@ export default function Home() {
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard title="Active Jobs" value="0" sub="Queue empty" icon={<Activity className="h-5 w-5 text-blue-500" />} />
-        <StatCard title="Templates" value="3" sub="Ready to use" icon={<FileText className="h-5 w-5 text-emerald-500" />} />
-        <StatCard title="Total Configured" value="128" sub="Devices this month" icon={<Play className="h-5 w-5 text-purple-500" />} />
+        <StatCard
+          title="Active Sessions"
+          value={loading ? "--" : activeSessions.toString()}
+          sub={activeSessions === 1 ? "Console lock active" : "Console locks active"}
+          icon={<Activity className="h-5 w-5 text-blue-500" />}
+        />
+        <StatCard
+          title="Templates"
+          value={loading ? "--" : templates.length.toString()}
+          sub={templates.length === 1 ? "Ready to use" : "Ready to use"}
+          icon={<FileText className="h-5 w-5 text-emerald-500" />}
+        />
+        <StatCard
+          title="Total Configured"
+          value={loading ? "--" : configuredTargets.toString()}
+          sub="Successful targets"
+          icon={<CheckCircle className="h-5 w-5 text-purple-500" />}
+        />
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          {error}
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="flex gap-4">
@@ -36,9 +138,39 @@ export default function Home() {
             View All <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
-        <div className="p-6 text-center text-neutral-500 py-12 text-sm">
-          No recent jobs found. Start one above.
-        </div>
+        {loading ? (
+          <div className="p-6 text-center text-neutral-500 py-12 text-sm">
+            Loading recent jobs...
+          </div>
+        ) : recentJobs.length === 0 ? (
+          <div className="p-6 text-center text-neutral-500 py-12 text-sm">
+            No recent jobs found. Start one above.
+          </div>
+        ) : (
+          <div className="divide-y divide-neutral-800">
+            {recentJobs.map((job) => (
+              <Link
+                key={job.id}
+                href={`/jobs/${job.id}`}
+                className="flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-neutral-800/30"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <StatusIcon status={job.status} />
+                    <span className="font-medium text-neutral-200">Job #{job.id}</span>
+                    <span className="text-xs text-neutral-500">Template #{job.template_id}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {job.targets.length} {job.targets.length === 1 ? "target" : "targets"} · {new Date(job.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs capitalize text-neutral-300">
+                  {job.status}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -55,4 +187,20 @@ function StatCard({ title, value, sub, icon }: { title: string; value: string; s
       <p className="text-xs text-neutral-500">{sub}</p>
     </div>
   );
+}
+
+function StatusIcon({ status }: { status: string }) {
+  if (status === "completed") {
+    return <CheckCircle className="h-4 w-4 text-emerald-500" />;
+  }
+
+  if (status === "failed") {
+    return <XCircle className="h-4 w-4 text-rose-500" />;
+  }
+
+  if (status === "running") {
+    return <Activity className="h-4 w-4 text-blue-500" />;
+  }
+
+  return <Clock className="h-4 w-4 text-neutral-500" />;
 }

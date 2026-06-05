@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import SidebarSystemStatus from "@/components/SidebarSystemStatus";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -37,7 +36,9 @@ export default function RootLayout({
               <NavLink href="/help">Help</NavLink>
             </nav>
 
-            <SidebarSystemStatus />
+            <div className="mt-auto rounded-lg bg-neutral-800/50 p-3 text-xs text-neutral-500 border border-neutral-800">
+              <p>System: <span className="text-emerald-500 font-medium">Healthy</span></p>
+            </div>
           </aside>
 
           {/* Main Content */}

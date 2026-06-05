@@ -6,7 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .routers import templates, jobs, console, settings
+from .routers import templates, jobs, console, settings, dashboard
 
 # Create DB tables
 Base.metadata.create_all(bind=engine)
@@ -25,6 +25,7 @@ app.include_router(templates.router)
 app.include_router(jobs.router)
 app.include_router(console.router)
 app.include_router(settings.router)
+app.include_router(dashboard.router)
 
 @app.get("/")
 def read_root():

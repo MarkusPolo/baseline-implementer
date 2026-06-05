@@ -3,33 +3,24 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Play, FileText, Activity, CheckCircle, Clock, XCircle } from "lucide-react";
-import api from "@/lib/api";
-
-type PortStatus = {
-  busy: boolean;
-};
-
-type Template = {
-  id: number;
-};
-
-type JobTarget = {
-  id: number;
-  status: string;
-};
 
 type Job = {
   id: number;
   template_id: number;
   status: string;
   created_at: string;
-  targets: JobTarget[];
+  target_count: number;
+};
+
+type DashboardSummary = {
+  active_sessions: number;
+  template_count: number;
+  configured_targets: number;
+  recent_jobs: Job[];
 };
 
 export default function Home() {
-  const [ports, setPorts] = useState<PortStatus[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,22 +29,16 @@ export default function Home() {
 
     async function loadDashboard() {
       try {
-        const [portsRes, templatesRes, jobsRes] = await Promise.all([
-          fetch("/api/console/ports"),
-          api.get("templates/"),
-          api.get("jobs/"),
-        ]);
+        const response = await fetch("/api/dashboard/summary");
 
-        if (!portsRes.ok) {
-          throw new Error("Could not load console locks");
+        if (!response.ok) {
+          throw new Error("Could not load dashboard summary");
         }
 
-        const portsData = (await portsRes.json()) as PortStatus[];
+        const data = (await response.json()) as DashboardSummary;
 
         if (!cancelled) {
-          setPorts(portsData);
-          setTemplates(templatesRes.data);
-          setJobs(jobsRes.data);
+          setSummary(data);
           setError(null);
         }
       } catch (err) {
@@ -76,12 +61,10 @@ export default function Home() {
     };
   }, []);
 
-  const activeSessions = ports.filter((port) => port.busy).length;
-  const configuredTargets = jobs.reduce(
-    (total, job) => total + job.targets.filter((target) => target.status === "success").length,
-    0
-  );
-  const recentJobs = useMemo(() => jobs.slice(0, 5), [jobs]);
+  const activeSessions = summary?.active_sessions ?? 0;
+  const templateCount = summary?.template_count ?? 0;
+  const configuredTargets = summary?.configured_targets ?? 0;
+  const recentJobs = useMemo(() => summary?.recent_jobs ?? [], [summary]);
 
   return (
     <div className="space-y-8">
@@ -100,8 +83,8 @@ export default function Home() {
         />
         <StatCard
           title="Templates"
-          value={loading ? "--" : templates.length.toString()}
-          sub={templates.length === 1 ? "Ready to use" : "Ready to use"}
+          value={loading ? "--" : templateCount.toString()}
+          sub="Ready to use"
           icon={<FileText className="h-5 w-5 text-emerald-500" />}
         />
         <StatCard
@@ -161,7 +144,7 @@ export default function Home() {
                     <span className="text-xs text-neutral-500">Template #{job.template_id}</span>
                   </div>
                   <p className="mt-1 text-xs text-neutral-500">
-                    {job.targets.length} {job.targets.length === 1 ? "target" : "targets"} · {new Date(job.created_at).toLocaleString()}
+                    {job.target_count} {job.target_count === 1 ? "target" : "targets"} · {new Date(job.created_at).toLocaleString()}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs capitalize text-neutral-300">

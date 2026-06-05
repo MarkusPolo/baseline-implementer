@@ -93,6 +93,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
 
             // Text frames are raw terminal data
             term.write(data);
+            handleTabCompletionOutput(data);
         };
 
         socket.onclose = (event) => {
@@ -118,6 +119,65 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
         });
 
         let currentLine = "";
+        let pendingTabCompletion = false;
+        let tabCompletionTimer: ReturnType<typeof setTimeout> | null = null;
+
+        function beginTabCompletionCapture() {
+            pendingTabCompletion = true;
+            if (tabCompletionTimer) {
+                clearTimeout(tabCompletionTimer);
+            }
+            tabCompletionTimer = setTimeout(() => {
+                pendingTabCompletion = false;
+                tabCompletionTimer = null;
+            }, 700);
+        }
+
+        function endTabCompletionCapture() {
+            pendingTabCompletion = false;
+            if (tabCompletionTimer) {
+                clearTimeout(tabCompletionTimer);
+                tabCompletionTimer = null;
+            }
+        }
+
+        function stripAnsi(value: string) {
+            return value.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+        }
+
+        function extractPromptCommand(line: string) {
+            const cleanedLine = line.replace(/\r/g, "").trimEnd();
+            const match = cleanedLine.match(/(?:^|\s)(?:[\w.-]+(?:\([^)]+\))?[>#])\s*(.*)$/);
+            return match?.[1]?.trimEnd() || "";
+        }
+
+        function handleTabCompletionOutput(data: string) {
+            if (!pendingTabCompletion || !currentLine) return;
+
+            const cleaned = stripAnsi(data).replace(/\x08/g, "");
+            if (!cleaned) return;
+
+            const normalized = cleaned.replace(/\r/g, "\n");
+            const lines = normalized.split("\n").map(line => line.trimEnd()).filter(Boolean);
+            const promptCommand = [...lines]
+                .reverse()
+                .map(extractPromptCommand)
+                .find(command => command.startsWith(currentLine));
+
+            if (promptCommand) {
+                currentLine = promptCommand;
+                endTabCompletionCapture();
+                return;
+            }
+
+            // Inline completion usually arrives as only the missing suffix.
+            // Multiline output is often an ambiguous-completion list, so ignore it.
+            if (!/[\r\n]/.test(cleaned) && /^[\x20-\x7e]+$/.test(cleaned) && cleaned.length <= 80) {
+                currentLine += cleaned;
+                endTabCompletionCapture();
+            }
+        }
+
         function handleRecordingInput(data: string) {
             for (const char of data) {
                 if (char === "\r" || char === "\n") {
@@ -125,8 +185,11 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                         onCommandRef.current?.(currentLine.trim());
                     }
                     currentLine = "";
+                    endTabCompletionCapture();
                 } else if (char === "\x7f") {
                     currentLine = currentLine.slice(0, -1);
+                } else if (char === "\t") {
+                    beginTabCompletionCapture();
                 } else {
                     if (char.length === 1 && char >= " ") {
                         currentLine += char;
@@ -141,6 +204,9 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
         resizeObserver.observe(terminalRef.current);
 
         return () => {
+            if (tabCompletionTimer) {
+                clearTimeout(tabCompletionTimer);
+            }
             socket.close();
             term.dispose();
             resizeObserver.disconnect();

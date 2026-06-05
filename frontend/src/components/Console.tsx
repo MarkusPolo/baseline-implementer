@@ -128,6 +128,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
         let tabCompletionOutput = "";
         let pendingTabCompletion = false;
         let tabCompletionTimer: ReturnType<typeof setTimeout> | null = null;
+        let tabCompletionSettleTimer: ReturnType<typeof setTimeout> | null = null;
 
         function beginTabCompletionCapture() {
             pendingTabCompletion = true;
@@ -137,9 +138,8 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                 clearTimeout(tabCompletionTimer);
             }
             tabCompletionTimer = setTimeout(() => {
-                pendingTabCompletion = false;
-                tabCompletionTimer = null;
-            }, 700);
+                endTabCompletionCapture();
+            }, 900);
         }
 
         function endTabCompletionCapture() {
@@ -149,6 +149,10 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             if (tabCompletionTimer) {
                 clearTimeout(tabCompletionTimer);
                 tabCompletionTimer = null;
+            }
+            if (tabCompletionSettleTimer) {
+                clearTimeout(tabCompletionSettleTimer);
+                tabCompletionSettleTimer = null;
             }
         }
 
@@ -198,6 +202,15 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
             return base + text.slice(overlap);
         }
 
+        function scheduleTabCompletionSettle() {
+            if (tabCompletionSettleTimer) {
+                clearTimeout(tabCompletionSettleTimer);
+            }
+            tabCompletionSettleTimer = setTimeout(() => {
+                endTabCompletionCapture();
+            }, 120);
+        }
+
         function handleTabCompletionOutput(data: string) {
             if (!onCommandRef.current || !pendingTabCompletion || !currentLine) return;
 
@@ -214,7 +227,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
 
             if (promptCommand) {
                 currentLine = promptCommand;
-                endTabCompletionCapture();
+                scheduleTabCompletionSettle();
                 return;
             }
 
@@ -223,7 +236,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                 const possibleCommand = tabCompletionOutput.slice(fullCommandIndex).split(/[\r\n]/)[0].trimEnd();
                 if (possibleCommand.startsWith(tabCompletionBase)) {
                     currentLine = possibleCommand;
-                    endTabCompletionCapture();
+                    scheduleTabCompletionSettle();
                     return;
                 }
             }
@@ -236,7 +249,7 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
                     return;
                 }
                 currentLine = mergedCommand;
-                endTabCompletionCapture();
+                scheduleTabCompletionSettle();
             }
         }
 
@@ -268,6 +281,9 @@ export function Console({ portId, onCommand, className }: ConsoleProps) {
         return () => {
             if (tabCompletionTimer) {
                 clearTimeout(tabCompletionTimer);
+            }
+            if (tabCompletionSettleTimer) {
+                clearTimeout(tabCompletionSettleTimer);
             }
             socket.close();
             term.dispose();

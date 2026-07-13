@@ -1,6 +1,7 @@
 import os
 import time
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from celery import Celery
 from sqlalchemy.orm import Session
 from jinja2 import Environment, StrictUndefined
@@ -18,6 +19,7 @@ from serial_lib.prompt_detector import PromptDetector
 
 # Redis URL - make configurable
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+JOB_TARGET_CONCURRENCY = int(os.getenv("JOB_TARGET_CONCURRENCY", "3"))
 
 celery_app = Celery("worker", broker=REDIS_URL, backend=REDIS_URL)
 
@@ -305,22 +307,63 @@ def execute_job(self, job_id: int):
 
         verification_checks = (job.template.verification if job.template else []) or []
         template_steps = normalize_template_steps(job.template)
+        target_ids = [target.id for target in job.targets if target.status == "queued"]
         
-        # Simple sequential execution for MVP
-        for target in job.targets:
-            process_target(db, target, template_steps, verification_checks)
+        max_workers = max(1, min(JOB_TARGET_CONCURRENCY, len(target_ids) or 1))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(
+                    claim_and_process_target,
+                    target_id,
+                    template_steps,
+                    verification_checks,
+                )
+                for target_id in target_ids
+            ]
+            for future in as_completed(futures):
+                future.result()
         
         # Check overall status
-        failed = any(t.status == "failed" for t in job.targets)
-        job.status = "failed" if failed else "completed"
+        db.expire_all()
+        targets = db.query(models.JobTarget).filter(models.JobTarget.job_id == job_id).all()
+        failed = any(t.status == "failed" for t in targets)
+        unfinished = any(t.status in ("queued", "running") for t in targets)
+        job.status = "running" if unfinished else ("failed" if failed else "completed")
         db.commit()
 
     finally:
         db.close()
 
-def process_target(db: Session, target: models.JobTarget, template_steps: list, verification_checks: list):
-    target.status = "running"
-    db.commit()
+def claim_and_process_target(target_id: int, template_steps: list, verification_checks: list):
+    """
+    Claim one queued target and process it with an isolated DB session.
+    The conditional update is the single source of truth that prevents duplicate
+    execution if another worker is already handling the same target.
+    """
+    db = get_db_session()
+    try:
+        claimed = (
+            db.query(models.JobTarget)
+            .filter(
+                models.JobTarget.id == target_id,
+                models.JobTarget.status == "queued",
+            )
+            .update({"status": "running"}, synchronize_session=False)
+        )
+        db.commit()
+        if claimed != 1:
+            return
+
+        target = db.query(models.JobTarget).filter(models.JobTarget.id == target_id).first()
+        if target:
+            process_target(db, target, template_steps, verification_checks, already_claimed=True)
+    finally:
+        db.close()
+
+def process_target(db: Session, target: models.JobTarget, template_steps: list, verification_checks: list, already_claimed: bool = False):
+    if not already_claimed:
+        target.status = "running"
+        db.commit()
     
     log_buffer = []
     

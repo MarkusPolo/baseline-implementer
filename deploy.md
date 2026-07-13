@@ -197,6 +197,7 @@ WorkingDirectory=/home/ubuntu/baseline-implementer
 Environment="PATH=/home/ubuntu/miniforge3/envs/switchconfig/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="PYTHONPATH=/home/ubuntu/baseline-implementer"
 Environment="REDIS_URL=redis://localhost:6379/0"
+Environment="JOB_TARGET_CONCURRENCY=3"
 ExecStart=/home/ubuntu/miniforge3/envs/switchconfig/bin/celery -A backend.worker.celery_app worker --loglevel=info --concurrency=2
 Restart=always
 RestartSec=10
@@ -205,7 +206,7 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
-**Note**: `--concurrency=2` limits worker threads for Raspberry Pi. Adjust based on your model.
+**Note**: `JOB_TARGET_CONCURRENCY=3` runs up to three devices from the same job in parallel. `--concurrency=2` controls how many Celery tasks the worker process accepts at once; adjust both based on your Raspberry Pi model and serial adapter capacity.
 
 ### 3.3 Frontend Service
 

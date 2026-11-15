@@ -56,7 +56,7 @@ class CommandRunner:
         raise TimeoutError(f"Timed out waking console. Last output seen:\n{buf[-500:]}")
 
     def ensure_priv_exec(self, custom_command: Optional[str] = None, password: Optional[str] = None):
-        buf = self.get_prompted()
+        buf = self.wake_console()
 
         prompt_type = self.detector.detect(buf)
         if prompt_type == PromptType.PRIV:
@@ -68,24 +68,38 @@ class CommandRunner:
 
         if prompt_type == PromptType.USER:
             cmd = custom_command or "en"
+            if any(c in cmd for c in "\r\n") or (password and any(c in password for c in "\r\n")):
+                raise ValueError("Enable command and password must each be a single line.")
             self.session.send_line(cmd)
-            # Wait for either the priv prompt OR a password prompt
-            out = self.session.wait_for(self.detector.PROMPT_PRIV_OR_PWD, timeout=10.0)
-            
+            out = self._wait_for_enable_response(timeout=10.0)
+
             if self.detector.PROMPT_PWD.search(out):
                 if password:
                     self.session.send_line(password)
-                    # Wait for priv prompt after password
-                    out = self.session.wait_for(self.detector.PROMPT_PRIV, timeout=15.0)
+                    out = self._wait_for_enable_response(timeout=15.0)
                 else:
                     raise RuntimeError("Enable password prompt detected but no password provided.")
-            
-            if not self.detector.PROMPT_PRIV.search(out):
-                 raise RuntimeError(f"Unexpected response after '{cmd}':\n{out[-400:]}")
+
+            if self.detector.detect(out) != PromptType.PRIV:
+                raise RuntimeError("Enable password authentication failed or privileged mode was denied.")
             return
 
         # Unknown prompt style
         raise RuntimeError(f"Could not determine prompt state. Buffer tail:\n{buf[-400:]}")
+
+    def _wait_for_enable_response(self, timeout: float) -> str:
+        """Read fragmented/ANSI decorated replies without exposing echoed secrets."""
+        buf = ""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            buf += self.session.read_available()
+            normalized = self.detector.normalize(buf)
+            if re.search(r"access denied|authentication failed|bad (?:password|secrets)|incorrect password|%\s*(?:error|invalid|incomplete|ambiguous)|password required", normalized, re.I):
+                raise RuntimeError("Enable password authentication failed or enable command was rejected.")
+            if self.detector.PROMPT_USER_PWD_OR_LOGIN.search(normalized):
+                return normalized
+            time.sleep(0.05)
+        raise TimeoutError("Timed out waiting for enable password or privileged prompt.")
 
     def authenticate(
         self,

@@ -2,6 +2,7 @@ import os
 import sys
 import types
 from unittest.mock import MagicMock
+import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -78,3 +79,31 @@ def test_verification_command_render_error_is_reported():
     runner.run_show.assert_not_called()
     assert results[0]["status"] == "error"
     assert "Verification render error" in results[0]["message"]
+
+
+@pytest.mark.parametrize("fields, expected", [
+    ({"password": "{{ enable_password }}"}, "enable-secret"),
+    ({"password": "literal-secret"}, "literal-secret"),
+    ({"password": ""}, ""),
+    ({}, "enable-secret"),
+])
+def test_privileged_step_renders_password_and_preserves_explicit_blank(monkeypatch, fields, expected):
+    from backend import worker
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    target = MagicMock(port="test-port", variables={"enable_password": "enable-secret", "password": "login-secret", "enable_cmd": "enable"})
+    runner = MagicMock()
+    monkeypatch.setattr(worker.models, "Setting", MagicMock())
+    monkeypatch.setattr(worker.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(worker, "SerialSession", MagicMock())
+    monkeypatch.setattr(worker, "CommandRunner", MagicMock(return_value=runner))
+
+    worker.process_target(db, target, [{"type": "priv_mode", "content": "{{ enable_cmd }}", **fields}], [])
+
+    assert target.status == "success"
+    runner.ensure_priv_exec.assert_called_once_with(custom_command="enable", password=expected)
+    calls = [call[0] for call in runner.method_calls]
+    assert calls.index("ensure_priv_exec") < calls.index("disable_paging")
+    assert "enable-secret" not in target.log
+    assert "literal-secret" not in target.log

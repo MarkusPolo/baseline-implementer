@@ -485,11 +485,18 @@ def process_target(db: Session, target: models.JobTarget, template_steps: list, 
 
                     elif step_type == "priv_mode":
                          wake_console_once()
-                         initialize_paging()
-                         cmd = step.get("content") or step.get("command")
-                         pwd = target.variables.get("enable_password") or target.variables.get("password")
+                         cmd = step.get("content") or step.get("command") or step.get("cmd") or "en"
+                         cmd = env.from_string(cmd).render(**target.variables)
+                         # An explicit empty password means password-free enable.
+                         # Preserve variable fallback for older templates only.
+                         pwd = step.get("password") if "password" in step else (
+                             target.variables.get("enable_password") or target.variables.get("password")
+                         )
+                         if pwd:
+                             pwd = env.from_string(pwd).render(**target.variables)
                          runner.ensure_priv_exec(custom_command=cmd, password=pwd)
-                         log(f"Acquired privileged mode (using: {cmd or 'default'}).")
+                         log("Acquired privileged mode.")
+                         initialize_paging()
 
                     elif step_type == "authenticate" or step_type == "login":
                          user = step.get("username") or target.variables.get("username")

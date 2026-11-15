@@ -6,6 +6,8 @@ import { Trash2, Plus, Save, ArrowLeft, Wand2, Shield, Terminal as TermIcon } fr
 interface TemplateStep {
     type: string;
     cmd?: string;
+    content?: string;
+    command?: string;
     wait_prompt?: boolean;
     pattern?: string; // for expect/verify
     response?: string; // for expect
@@ -70,6 +72,8 @@ export function TemplateEditor({ initialSteps, initialName = "", onSave, onCance
         currentSteps.forEach(step => {
             const content = [
                 step.cmd,
+                step.content,
+                step.command,
                 step.pattern,
                 step.response,
                 step.username,
@@ -131,6 +135,11 @@ export function TemplateEditor({ initialSteps, initialName = "", onSave, onCance
         if (type === "authenticate") {
             nextStep.username = nextStep.username || "{{username}}";
             nextStep.password = nextStep.password || "{{password}}";
+        }
+        if (type === "priv_mode") {
+            nextStep.cmd = nextStep.cmd || "en";
+            nextStep.password = "";
+            nextStep.username = undefined;
         }
 
         newSteps[index] = nextStep;
@@ -260,6 +269,7 @@ export function TemplateEditor({ initialSteps, initialName = "", onSave, onCance
                                             <option value="expect">Expect/Send</option>
                                             <option value="verify">Verify Output</option>
                                             <option value="authenticate">Login / Auth</option>
+                                            <option value="priv_mode">Enter Privileged Mode</option>
                                         </select>
                                     </div>
 
@@ -344,6 +354,34 @@ export function TemplateEditor({ initialSteps, initialName = "", onSave, onCance
                                                     placeholder="Regex to match (supports multi-line)..."
                                                 />
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {step.type === "priv_mode" && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs text-neutral-400">Enable Command</label>
+                                            <input
+                                                aria-label="Enable command"
+                                                type="text"
+                                                value={step.content ?? step.command ?? step.cmd ?? "en"}
+                                                onChange={(e) => {
+                                                    const newSteps = [...steps];
+                                                    newSteps[i] = { ...step, cmd: e.target.value, content: undefined, command: undefined };
+                                                    setSteps(newSteps);
+                                                }}
+                                                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200"
+                                            />
+                                            <label className="text-xs text-neutral-400">Enable Password (optional)</label>
+                                            <input
+                                                aria-label="Enable password (optional)"
+                                                type="password"
+                                                autoComplete="new-password"
+                                                value={step.password ?? ""}
+                                                onChange={(e) => updateStep(i, "password", e.target.value)}
+                                                placeholder="{{enable_password}}"
+                                                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200"
+                                            />
+                                            <p className="text-xs text-neutral-500">Leave blank for password-free enable. Use {"{{enable_password}}"} to request a password when starting a job. Sent only when prompted; no username needed.</p>
                                         </div>
                                     )}
 

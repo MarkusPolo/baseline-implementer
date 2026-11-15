@@ -142,7 +142,7 @@ function TemplateBuilder() {
             check_type: type === 'verify' ? 'regex_match' : undefined,
             pattern: type === 'verify' ? '' : undefined,
             username: type === 'authenticate' ? '{{ username }}' : undefined,
-            password: type === 'authenticate' ? '{{ password }}' : undefined,
+            password: type === 'authenticate' ? '{{ password }}' : type === 'priv_mode' ? '' : undefined,
         };
         setSteps([...steps, newStep]);
     };
@@ -367,6 +367,22 @@ function TemplateBuilder() {
                                                 <ChevronRight className="h-3 w-3" />
                                                 This step uses the specified command to transition device state.
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {step.type === 'priv_mode' && (
+                                        <div className="space-y-2">
+                                            <label htmlFor={`enable-password-${step.id}`} className="text-[10px] font-bold text-neutral-500 uppercase block">Enable Password (optional)</label>
+                                            <input
+                                                id={`enable-password-${step.id}`}
+                                                type="password"
+                                                autoComplete="new-password"
+                                                value={step.password ?? ''}
+                                                onChange={(e) => updateStep(step.id, { password: e.target.value })}
+                                                placeholder="{{ enable_password }}"
+                                                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm font-mono text-blue-400 focus:outline-none focus:border-blue-500"
+                                            />
+                                            <p className="text-xs text-neutral-500">Leave blank for password-free enable. Use {'{{ enable_password }}'} to supply a separate password when starting a job. The password is sent only if the switch asks for it; no username is needed.</p>
                                         </div>
                                     )}
 
